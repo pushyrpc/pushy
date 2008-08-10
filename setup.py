@@ -65,7 +65,7 @@ setup(
     description = description,
     long_description = long_description,
     classifiers = classifiers,
-    install_requires = dependencies,
+    requires = dependencies,
     author="Andrew Wilkins",
     author_email="axwalk@gmail.com",
     url="http://launchpad.net/pushy/",
