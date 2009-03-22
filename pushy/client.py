@@ -21,10 +21,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-"""
-Main client/server interface to pushy.
-"""
-
 import __builtin__, hashlib, imp, marshal, os, sys, marshal, os, struct
 import threading, cPickle as pickle
 
@@ -300,14 +296,14 @@ class PushyClient:
         self.server = transport.Popen(command, **kwargs)
 
         try:
-            # Write the "real" server source to the remote process
-            self.server.stdin.write(serverSource)
-            self.server.stdin.flush()
-
-            # Send the packages over to the server
-            packages = self.load_packages()
-            pickle.dump(packages, self.server.stdin)
-            self.server.stdin.flush()
+            if not self.server.daemon:
+                # Write the "real" server source to the remote process
+                self.server.stdin.write(serverSource)
+                self.server.stdin.flush()
+                # Send the packages over to the server
+                packages = self.load_packages()
+                pickle.dump(packages, self.server.stdin)
+                self.server.stdin.flush()
 
             # Finally... start the connection. Magic! 
             import pushy.protocol

@@ -21,3 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
+class BaseTransport:
+    def __init__(self, daemon=False):
+        self.daemon = daemon
+

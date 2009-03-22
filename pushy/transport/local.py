@@ -23,8 +23,11 @@
 
 import os, subprocess
 
-class Popen:
+import pushy.transport
+
+class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, **kwargs):
+        pushy.transport.BaseTransport.__init__(self)
         self.__proc = subprocess.Popen(command, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
