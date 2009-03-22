@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -21,8 +21,26 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-transports = {"ssh": None, "local": None, "daemon": None}
+import os, socket, StringIO
 
-from client import PushyClient as connect
-from server import serve_forever
+import pushy.transport
+import pushy.server
+
+DEFAULT_PORT = pushy.server.DEFAULT_PORT
+
+class Popen(pushy.transport.BaseTransport):
+    def __init__(self, command, **kwargs):
+        pushy.transport.BaseTransport.__init__(self, daemon=True)
+        self.__socket = socket.socket()
+        self.__socket.connect(
+            (kwargs["address"], kwargs.get("port", DEFAULT_PORT)))
+
+        self.stdin  = self.__socket.makefile("wb")
+        self.stdout = self.__socket.makefile("rb")
+        self.stderr = StringIO.StringIO()
+
+    def close(self):
+        self.stdin.close()
+        self.stdout.close()
+        self.__socket.close()
 

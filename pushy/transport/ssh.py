@@ -29,6 +29,8 @@ Author: Andrew Wilkins <axwalk@gmail.com>
 
 import paramiko
 
+import pushy.transport
+
 class SafeSSHClient(paramiko.SSHClient):
     """
     Subclass of paramiko.SSHClient, which makes its Transport a daemon
@@ -48,8 +50,9 @@ class SafeSSHClient(paramiko.SSHClient):
             value.setDaemon(True)
         self.__dict__[name] = value
 
-class Popen:
+class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, **kwargs):
+        pushy.transport.BaseTransport.__init__(self)
         self.__client = SafeSSHClient()
 
         connect_args = {"hostname": kwargs["address"]}
