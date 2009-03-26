@@ -30,13 +30,19 @@ import pushy.util
 import unittest
 import zipfile
 
+def sort_list(o):
+    if type(o) is list:
+        return sorted(o)
+    return o
+
 class TestZipwalk(unittest.TestCase):
     def test_walk(self):
         zf = zipfile.ZipFile(os.path.join(thisdir, "data", "test_zipwalk.zip"))
-        zip_items = [item for item in pushy.util.zipwalk(zf)]
+        zip_items = \
+            sort_list([map(sort_list,item) for item in pushy.util.zipwalk(zf)])
 
         dir_ = os.path.join(thisdir, "data", "test_zipwalk")
-        dir_items = [item for item in os.walk(dir_)]
+        dir_items = sort_list([map(sort_list, item) for item in os.walk(dir_)])
         self.assertEqual(len(zip_items), len(dir_items))
 
         for i in range(len(zip_items)):

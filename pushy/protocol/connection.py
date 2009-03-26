@@ -25,6 +25,14 @@ import marshal, os, struct
 from pushy.protocol.message import Message, MessageType
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 
+# TODO take mutable types out of here, and handle them specially.
+#      i.e. set, dict, and list.
+marshallable_types = (
+    unicode, slice, frozenset, float, basestring, long, str, int, complex,
+    bool, buffer, dict, list, set
+)
+
+
 class LoggingFile:
     def __init__(self, stream, log):
         self.stream = stream
@@ -114,38 +122,40 @@ class Connection:
         # TODO differentiate objects which originate from the peer (i.e. just
         #      refer to them by id).
         try:
-            return "s" + marshal.dumps(obj, 0)
+            if type(obj) in marshallable_types:
+                return "s" + marshal.dumps(obj, 0)
         except ValueError:
-            # If it's a tuple, try to marshal each item individually.
-            if type(obj) is tuple:
-                payload = "t"
-                try:
-                    for item in obj:
-                        #print >> open("marshal.txt", "a"), "->", repr(item)
-                        part = self.__marshal(item)
-                        payload += struct.pack(">I", len(part))
-                        payload += part
-                    return payload
-                except ValueError: pass
+            pass
 
-            i = id(obj)
-            if i in self.__proxied_objects:
-                return "p" + marshal.dumps(i)
-            else:
-                # Create new entry in proxy objects map:
-                #    id -> (obj, refcount, opmask)
-                #
-                # opmask is a bitmask defining whether or not the object
-                # defines various methods (__add__, __iter__, etc.)
-                opmask = get_opmask(obj)
-                obj_type = ProxyType.get(obj)
-                self.__proxied_objects[i] = obj
+        # If it's a tuple, try to marshal each item individually.
+        if type(obj) is tuple:
+            payload = "t"
+            try:
+                for item in obj:
+                    #print >> open("marshal.txt", "a"), "->", repr(item)
+                    part = self.__marshal(item)
+                    payload += struct.pack(">I", len(part))
+                    payload += part
+                return payload
+            except ValueError: pass
 
-                #if not self.__initiator:
-                #    print >> open("marshal.txt", "a"), \
-                #                 (i, opmask, int(obj_type)), repr(obj)
+        i = id(obj)
+        if i in self.__proxied_objects:
+            return "p" + marshal.dumps(i)
+        else:
+            # Create new entry in proxy objects map:
+            #    id -> (obj, refcount, opmask)
+            #
+            # opmask is a bitmask defining whether or not the object
+            # defines various methods (__add__, __iter__, etc.)
+            opmask = get_opmask(obj)
+            obj_type = ProxyType.get(obj)
+            self.__proxied_objects[i] = obj
 
-                return "p" + marshal.dumps((i, opmask, int(obj_type)), 0)
+            if self.__logfile is not None:
+                print >> self.__logfile, (i, opmask, int(obj_type)), repr(obj)
+
+            return "p" + marshal.dumps((i, opmask, int(obj_type)), 0)
 
     def __unmarshal(self, payload):
         if payload.startswith("s"):
