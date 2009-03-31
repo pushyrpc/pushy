@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -27,8 +27,7 @@ Popen-like interface for executing commands on a remote host via SSH.
 Author: Andrew Wilkins <axwalk@gmail.com>
 """
 
-import paramiko
-
+import os, paramiko, sys
 import pushy.transport
 
 class SafeSSHClient(paramiko.SSHClient):
@@ -50,7 +49,7 @@ class SafeSSHClient(paramiko.SSHClient):
             value.setDaemon(True)
         self.__dict__[name] = value
 
-class Popen(pushy.transport.BaseTransport):
+class ParamikoPopen(pushy.transport.BaseTransport):
     def __init__(self, command, **kwargs):
         pushy.transport.BaseTransport.__init__(self)
         self.__client = SafeSSHClient()
@@ -75,15 +74,73 @@ class Popen(pushy.transport.BaseTransport):
         self.stderr = stderr
         self.fs = self.__client.open_sftp()
 
-"""
-else:
-    import popen2
+###############################################################################
+# Native SSH. This is used when no password is specified.
 
-    class SSHPopen:
-        def __init__(self, command, hostname, *args, **kwargs):
+native_ssh = os.environ.get("PUSHY_NATIVE_SSH", None)
+if native_ssh is not None:
+    if not os.path.exists(native_ssh):
+        import warnings
+        warnings.warn(
+            "Ignoring non-existant PUSHY_NATIVE_SSH (%r)" % native_ssh)
+        native_ssh = None
+
+if native_ssh is None:
+    paths = []
+    if "PATH" in os.environ:
+        paths = os.environ["PATH"].split(os.pathsep)
+
+    ssh_program = "ssh"
+    if sys.platform == "win32":
+        ssh_program = "plink.exe"
+
+    for path in paths:
+        path = os.path.join(path, ssh_program)
+        if os.path.exists(path):
+            native_ssh = path
+            break
+
+if native_ssh is not None:
+    import subprocess
+
+    class NativePopen(pushy.transport.BaseTransport):
+        def __init__(self, command, *args, **kwargs):
+            pushy.transport.BaseTransport.__init__(self)
+
+            hostname = kwargs["address"]
             if kwargs.has_key("username"):
                 hostname = kwargs["username"] + "@" + hostname
-            command = 'ssh "%s" "%s"' % (hostname, command)
-            self.stdout, self.stdin = popen2.popen2(command)
-"""
+
+            command = ['"%s"' % word for word in command]
+            args = [native_ssh, hostname, " ".join(command)]
+            self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
+                                           stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
+            self.stdout = self.__proc.stdout
+            self.stdin  = self.__proc.stdin
+            self.stderr = self.__proc.stderr
+
+        def __del__(self):
+            self.stdin.close()
+            self.stdout.close()
+            self.stderr.close()
+            try:
+                import os, signal
+                os.kill(self.__proc.pid, signal.SIGTERM)
+            except: pass
+            self.__proc.wait()
+
+        def close(self):
+            self.stdin.close()
+
+###############################################################################
+# Define Popen.
+
+if native_ssh is not None:
+    def Popen(command, *args, **kwargs):
+        if kwargs.get("use_native", True) and "password" not in kwargs:
+            return NativePopen(command, *args, **kwargs)
+        return ParamikoPopen(command, *args, **kwargs)
+else:
+    Popen = ParamikoPopen
 
