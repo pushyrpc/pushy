@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import marshal, os, struct
+import marshal, os, struct, threading
 from pushy.protocol.message import Message, MessageType
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 
@@ -49,17 +49,19 @@ class LoggingFile:
         self.log.flush()
         return data
 
+
 class Connection:
     def __init__(self, istream, ostream, initiator=True):
         self.__logfile   = None
         self.__istream   = istream
         self.__ostream   = ostream
         self.__initiator = initiator
+        self.__lock      = threading.RLock()
 
         # Uncomment the following for debugging.
         #self.__logfile = open("pushy.%d.log" % os.getpid(), "w")
-        #self.__istream = LoggingFile(istream, open("%d.in" % os.getpid(), "wb"))
-        #self.__ostream = LoggingFile(ostream, open("%d.out" % os.getpid(), "wb"))
+        #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
+        #self.__ostream = LoggingFile(ostream, open("%d.out"%os.getpid(),"wb"))
 
         self.__outstandingRequests = 0
         # (Client) Contains mapping of id(obj) -> proxy
@@ -77,38 +79,62 @@ class Connection:
         self.__handle(self.__recv())
 
     def eval(self, expression):
-        expression = self.__marshal(expression)
-        self.__outstandingRequests += 1
-        self.__send(Message(MessageType.evaluate, expression))
-        return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            expression = self.__marshal(expression)
+            self.__outstandingRequests += 1
+            self.__send(Message(MessageType.evaluate, expression))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def operator(self, type_, id_, args, kwargs):
-        parameters = self.__marshal((id_, args, kwargs))
-        self.__outstandingRequests += 1
-        self.__send(Message(type_, parameters))
-        return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            parameters = self.__marshal((id_, args, kwargs))
+            self.__outstandingRequests += 1
+            self.__send(Message(type_, parameters))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def getattr(self, id_, name):
-        parameters = self.__marshal((id_, name))
-        self.__outstandingRequests += 1
-        self.__send(Message(MessageType.getattr, parameters))
-        return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            parameters = self.__marshal((id_, name))
+            self.__outstandingRequests += 1
+            self.__send(Message(MessageType.getattr, parameters))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def setattr(self, id_, name, value):
-        parameters = self.__marshal((id_, name, value))
-        self.__outstandingRequests += 1
-        self.__send(Message(MessageType.setattr, parameters))
-        return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            parameters = self.__marshal((id_, name, value))
+            self.__outstandingRequests += 1
+            self.__send(Message(MessageType.setattr, parameters))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def getstr(self, id_):
-        self.__outstandingRequests += 1
-	self.__send(Message(MessageType.getstr, self.__marshal(id_)))
-	return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            self.__outstandingRequests += 1
+            self.__send(Message(MessageType.getstr, self.__marshal(id_)))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def getrepr(self, id_):
-        self.__outstandingRequests += 1
-	self.__send(Message(MessageType.getrepr, self.__marshal(id_)))
-	return self.__waitForResponse()
+        self.__lock.acquire()
+        try:
+            self.__outstandingRequests += 1
+            self.__send(Message(MessageType.getrepr, self.__marshal(id_)))
+            return self.__waitForResponse()
+        finally:
+            self.__lock.release()
 
     def __waitForResponse(self):
         res = None

@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -21,16 +21,29 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import glob, os, sys, unittest
+import os, sys
+
+thisdir = os.path.dirname(__file__)
+sys.path.append(os.path.join(thisdir, ".."))
+
+import pushy, threading, time, unittest
+
+class TestThreading(unittest.TestCase):
+    def setUp(self):
+        self.conn = pushy.connect("local:")
+
+    def test_blocking(self):
+        time_sleep = self.conn.modules.time.sleep
+        t1 = threading.Thread(target=time_sleep, args=(0.5,))
+        t2 = threading.Thread(target=time_sleep, args=(0.5,))
+        before = time.time()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        after = time.time()
+        self.assertAlmostEquals(before+1, time.time(), places=2)
 
 if __name__ == "__main__":
-    parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, parentdir)
-
-    loader = unittest.defaultTestLoader
-    files = glob.glob(os.path.join(os.path.dirname(__file__), "*.py"))
-    files = [os.path.splitext(os.path.basename(f))[0] for f in files]
-    tests  = loader.loadTestsFromNames(files)
-    runner = unittest.TextTestRunner()
-    runner.run(tests)
+    unittest.main()
 
