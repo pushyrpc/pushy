@@ -27,6 +27,10 @@ import pushy.transport
 if sys.platform != "win32":
     import impacket.smb
 
+    class PushySMB(impacket.smb.SMB):
+        def __init__(self, *args, **kwargs):
+            impacket.smb.SMB.__init__(self, *args, **kwargs)
+
     class SMBFile:
         def __init__(self, server, tid, fid):
             self.__lock = threading.Lock()
@@ -60,7 +64,7 @@ if sys.platform != "win32":
         def read(self, size):
             self.__lock.acquire()
             try:
-                data = self.__server.read_raw(self.__tid, self.__fid, 0, size)
+                data = self.__server.read(self.__tid, self.__fid, 0, size)
                 if data is None:
                     data = ""
                 return data
@@ -79,7 +83,7 @@ if sys.platform != "win32":
         def __init__(self, hostname, username, password, domain):
             # Create SMB connection, authenticate user.
             # TODO make port configurable
-            server = impacket.smb.SMB("*SMBSERVER", hostname)
+            server = PushySMB("*SMBSERVER", hostname)
             server.login(username, password, domain)
 
             # Connect to IPC$ share.
@@ -92,7 +96,7 @@ if sys.platform != "win32":
 
             # Create file-like objects for stdin/stdout/stderr.
             self.stdin  = SMBFile(server, tid_ipc, fid)
-            self.stdout = SMBFile(server, tid_ipc, fid)
+            self.stdout = self.stdin
             self.server = server
 
         def close(self):
