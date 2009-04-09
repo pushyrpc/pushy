@@ -22,6 +22,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import os, struct, sys, subprocess, StringIO, threading
+import pushy.transport
 
 if sys.platform != "win32":
     import impacket.smb
@@ -267,8 +268,9 @@ else:
                 raise Exception, "Authentication failed"
     BasePopen = NativePopen
 
-class Popen(BasePopen):
+class Popen(pushy.transport.BaseTransport, BasePopen):
     def __init__(self, command, **kwargs):
+        pushy.transport.BaseTransport.__init__(self)
         hostname = kwargs.get("address", None)
         username = kwargs.get("username", None)
         password = kwargs.get("password", None)
