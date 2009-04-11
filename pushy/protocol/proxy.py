@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -22,6 +22,9 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 from pushy.protocol.message import message_types
+import pushy.util
+import types
+
 
 class ProxyType:
     def __init__(self, code, name):
@@ -46,6 +49,10 @@ class ProxyType:
             return ProxyType.attributeerror
         if isinstance(obj, Exception):
             return ProxyType.exception
+        if isinstance(obj, dict):
+            return (ProxyType.dictionary, obj.keys())
+        if isinstance(obj, types.ModuleType):
+            return ProxyType.module
         return ProxyType.object
 
 
@@ -59,7 +66,7 @@ def get_opmask(obj):
     return (mask >> 1)
 
 
-def Proxy(id_, opmask, proxy_type, conn):
+def Proxy(id_, opmask, proxy_type, args, conn):
     """
     Create a proxy object, which delegates attribute access and method
     invocation to an object in a remote Python interpreter.
@@ -78,9 +85,31 @@ def Proxy(id_, opmask, proxy_type, conn):
         class ExceptionProxy(Exception, object):
             def __getattribute__(self, name): return conn.getattr(id_, name)
         ProxyClass = ExceptionProxy
+    elif proxy_type == ProxyType.dictionary:
+        pushy.util.logger.info("Got a dictionary type (%r)", args)
+        class DictionaryProxy(dict):
+            def __init__(self):
+                if args is not None:
+                    dict.__init__(self, zip(args, [None]*len(args)))
+                else:
+                    dict.__init__(self)
+            def __getattribute__(self, name):
+                pushy.util.logger.info("DictionaryProxy.getattr(%s)", name)
+                return conn.getattr(id_, name)
+        ProxyClass = DictionaryProxy
+    elif proxy_type == ProxyType.module:
+        pushy.util.logger.info("Got a module type")
+        class ModuleProxy(types.ModuleType):
+            def __init__(self): types.ModuleType.__init__(self, "")
+            def __getattribute__(self, name):
+                pushy.util.logger.info("ModuleProxy.getattr(%s)", name)
+                return conn.getattr(id_, name)
+        ProxyClass = ModuleProxy
     else:
         class ObjectProxy(object):
-            def __getattribute__(self, name): return conn.getattr(id_, name)
+            def __getattribute__(self, name):
+                pushy.util.logger.info("getattr(%s)", name)
+                return conn.getattr(id_, name)
         ProxyClass = ObjectProxy
 
     # Callable for delegating to an operator on the remote object.
@@ -128,7 +157,9 @@ proxy_names = (
   "object",
   "exception",
   "stopiteration",
-  "attributeerror"
+  "attributeerror",
+  "dictionary",
+  "module"
 )
 proxy_types = []
 for i,t in enumerate(proxy_names):

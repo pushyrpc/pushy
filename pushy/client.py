@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -322,7 +322,7 @@ class PushyClient:
 
             self.remote  = remote
             self.modules = modules_
-        except Exception, e:
+        except:
             import traceback
             traceback.print_exc()
             errorlines = self.server.stderr.readlines()
@@ -330,7 +330,7 @@ class PushyClient:
             for line in errorlines:
                 print >> sys.stderr, "[remote]", line.rstrip()
             print >> sys.stderr, ""
-            raise e
+            raise
 
     def __del__(self):
         if hasattr(self, "server"):

@@ -24,12 +24,13 @@
 import marshal, os, struct, threading
 from pushy.protocol.message import Message, MessageType
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
+import pushy.util
 
 # TODO take mutable types out of here, and handle them specially.
 #      i.e. set, dict, and list.
 marshallable_types = (
     unicode, slice, frozenset, float, basestring, long, str, int, complex,
-    bool, buffer, dict, list, set
+    bool, buffer, list, set
 )
 
 
@@ -170,18 +171,24 @@ class Connection:
             return "p" + marshal.dumps(i)
         else:
             # Create new entry in proxy objects map:
-            #    id -> (obj, refcount, opmask)
+            #    id -> (obj, refcount, opmask[, args])
             #
             # opmask is a bitmask defining whether or not the object
             # defines various methods (__add__, __iter__, etc.)
             opmask = get_opmask(obj)
-            obj_type = ProxyType.get(obj)
+            proxy_result = ProxyType.get(obj)
             self.__proxied_objects[i] = obj
 
-            if self.__logfile is not None:
-                print >> self.__logfile, (i, opmask, int(obj_type)), repr(obj)
+            if type(proxy_result) is tuple:
+                obj_type, args = proxy_result
+                dumps_args = (i, opmask, int(obj_type), self.__marshal(args))
+            else:
+                obj_type = proxy_result
+                dumps_args = (i, opmask, int(obj_type))
 
-            return "p" + marshal.dumps((i, opmask, int(obj_type)), 0)
+            if self.__logfile is not None:
+                print >> self.__logfile, dumps_args, repr(obj)
+            return "p" + marshal.dumps(dumps_args, 0)
 
     def __unmarshal(self, payload):
         if payload.startswith("s"):
@@ -202,7 +209,10 @@ class Connection:
             id_ = marshal.loads(buffer(payload, 1))
             if type(id_) is tuple:
                 # New object: (id, opmask, object_type)
-                p = Proxy(id_[0], id_[1], id_[2], self)
+                args = None
+                if len(id_) >= 4:
+                    args = self.__unmarshal(id_[3])
+                p = Proxy(id_[0], id_[1], id_[2], args, self)
                 self.__proxies[id_[0]] = p
             else:
                 # Known object: id
@@ -238,7 +248,8 @@ class Connection:
         return m
 
     def __send_response(self, result):
-        self.__send(Message(MessageType.response, self.__marshal(result)))
+        marshaled_result = self.__marshal(result)
+        self.__send(Message(MessageType.response, marshaled_result))
 
     def __handle(self, m):
         try:
@@ -257,8 +268,8 @@ class Connection:
             import sys, traceback
             (type, value, tb) = sys.exc_info()
 
-            #efile = open("exception.txt", "w")
-            #traceback.print_exc(file=efile)
+            if self.__logfile is not None:
+                traceback.print_exc(file=self.__logfile)
             tb = "".join(traceback.format_tb(tb))
             #print >> efile, "...", repr(type(value)), "..."
 
@@ -317,6 +328,10 @@ class Connection:
         (id_, args, kwargs) = self.__unmarshal(payload)
 
         if name == "__call__":
+            # Copy the *args and **kwargs. In particular, the **kwargs dict
+            # must be a real dict, because Python will do a PyDict_CheckExact
+            # somewhere along the line.
+            args, kwargs = list(args), dict(kwargs)
             self.__send_response(self.__proxied_objects[id_](*args, **kwargs))
         else:
             method = getattr(self.__proxied_objects[id_], name)
