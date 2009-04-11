@@ -67,6 +67,8 @@ class Connection:
         self.__outstandingRequests = 0
         # (Client) Contains mapping of id(obj) -> proxy
         self.__proxies = {}
+        # (Client) Contains mapping of id(proxy) -> id(obj)
+        self.__proxy_ids = {}
         # (Server) Contains mapping of id(obj) -> (obj, refcount, opmask)
         self.__proxied_objects = {}
 
@@ -146,8 +148,6 @@ class Connection:
     def __marshal(self, obj):
         # TODO check for mutable types, return proxy object.
         #      XXX perhaps we can check refcount to optimise (if 1, immutable)
-        # TODO differentiate objects which originate from the peer (i.e. just
-        #      refer to them by id).
         try:
             if type(obj) in marshallable_types:
                 return "s" + marshal.dumps(obj, 0)
@@ -166,9 +166,14 @@ class Connection:
                 return payload
             except ValueError: pass
 
+
+
         i = id(obj)
         if i in self.__proxied_objects:
             return "p" + marshal.dumps(i)
+        elif i in self.__proxy_ids:
+            # Object originates at the peer.
+            return "o" + marshal.dumps(self.__proxy_ids[i])
         else:
             # Create new entry in proxy objects map:
             #    id -> (obj, refcount, opmask[, args])
@@ -214,10 +219,15 @@ class Connection:
                     args = self.__unmarshal(id_[3])
                 p = Proxy(id_[0], id_[1], id_[2], args, self)
                 self.__proxies[id_[0]] = p
+                self.__proxy_ids[id(p)] = id_[0]
             else:
                 # Known object: id
                 p = self.__proxies[id_]
             return p
+        elif payload.startswith("o"):
+            # The object originated here.
+            id_ = marshal.loads(buffer(payload, 1))
+            return self.__proxied_objects[id_]
         else:
             raise ValueError, "Invalid payload prefix"
 
