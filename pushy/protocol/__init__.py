@@ -25,8 +25,6 @@
 This package defines the transport-independent protocol for communicating
 between interpreters. This is the core code for implementing proxies to objects
 in remote Python interpreters.
-
-Author: Andrew Wilkins <axwalk@gmail.com>
 """
 
 import message

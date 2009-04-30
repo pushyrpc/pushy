@@ -22,6 +22,19 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 class BaseTransport:
-    def __init__(self, daemon=False):
+    "Base class for all transports."
+
+    def __init__(self, address, daemon=False):
+        """
+        @param address: The transport-specific address.
+        @type  daemon: bool
+        @param daemon: True if the transport is a long-lived transport, such as
+                       the L{daemon<pushy.transport.daemon>} transport. If this
+                       is set to True, then the Pushy client will not send the
+                       Pushy package to the remote process when a connection is
+                       initiated.
+        """
+
+        self.address = address
         self.daemon = daemon
 

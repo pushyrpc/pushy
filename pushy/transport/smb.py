@@ -24,6 +24,8 @@
 import os, struct, sys, subprocess, StringIO, threading
 import pushy.transport
 
+__all__ = ["Popen", "ImpacketPopen", "NativePopen"]
+
 if sys.platform != "win32":
     import impacket.smb
 
@@ -80,7 +82,19 @@ if sys.platform != "win32":
             return data.splitlines()
 
     class ImpacketPopen:
+        """
+        SMB transport implementation which uses Impacket for connecting to a
+        remote named pipe.
+        """
+
         def __init__(self, hostname, username, password, domain):
+            """
+            @param hostname: The hostname of the target machine.
+            @param username: The username to authenticate with.
+            @param password: The password to authenticate with.
+            @param domain: The domain to authenticate with.
+            """
+
             # Create SMB connection, authenticate user.
             # TODO make port configurable
             server = PushySMB("*SMBSERVER", hostname)
@@ -249,7 +263,19 @@ else:
         return None
 
     class NativePopen:
+        """
+        SMB transport implementation which uses the Windows native API for
+        connecting to a remote named pipe.
+        """
+
         def __init__(self, hostname, username, password, domain):
+            """
+            @param hostname: The hostname of the target machine.
+            @param username: The username to authenticate with.
+            @param password: The password to authenticate with.
+            @param domain: The domain to authenticate with.
+            """
+
             # Determine current username/domain. If they're the same as the
             # one specified, don't bother authenticating.
             current_username = get_current_username_domain()
@@ -273,13 +299,16 @@ else:
     BasePopen = NativePopen
 
 class Popen(pushy.transport.BaseTransport, BasePopen):
-    def __init__(self, command, **kwargs):
-        pushy.transport.BaseTransport.__init__(self)
-        hostname = kwargs.get("address", None)
-        username = kwargs.get("username", None)
-        password = kwargs.get("password", None)
-        domain   = kwargs.get("domain", "")
-        BasePopen.__init__(self, hostname, username, password, domain)
+    def __init__(self, command, address, username=None, password=None,
+                 domain=""):
+        """
+        @param username: The username to authenticate with.
+        @param password: The password to authenticate with.
+        @param domain: The domain to authenticate with.
+        """
+
+        pushy.transport.BaseTransport.__init__(self, address)
+        BasePopen.__init__(self, address, username, password, domain)
         self.stderr = StringIO.StringIO()
 
         # Write program arguments.

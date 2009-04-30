@@ -21,29 +21,26 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, sys
+import pushy
 
-thisdir = os.path.dirname(__file__)
-sys.path.append(os.path.join(thisdir, ".."))
+connection = None
 
-import pushy, threading, time, unittest
+def parse_args():
+    from optparse import OptionParser
+    parser = OptionParser(usage = "%prog [options] target")
+    parser.add_option("-u", "--username", dest="username")
+    parser.add_option("-p", "--password", dest="password")
+    (options, args) = parser.parse_args()
+    if len(args) == 0:
+        parser.error("missing target argument")
+    return (options, args)
 
-class TestThreading(unittest.TestCase):
-    def setUp(self):
-        self.conn = pushy.connect("local:")
-
-    def test_blocking(self):
-        time_sleep = self.conn.modules.time.sleep
-        t1 = threading.Thread(target=time_sleep, args=(0.5,))
-        t2 = threading.Thread(target=time_sleep, args=(0.5,))
-        before = time.time()
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-        after = time.time()
-        self.assertAlmostEquals(before+1, time.time(), places=1)
-
-if __name__ == "__main__":
-    unittest.main()
+def get_connection():
+    global connection
+    if connection is None:
+        (options, args) = parse_args()
+        connection = pushy.connect(args[0],
+                                   username=options.username,
+                                   password=options.password)
+    return connection
 

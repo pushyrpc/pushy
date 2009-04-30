@@ -21,29 +21,14 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, sys
-
-thisdir = os.path.dirname(__file__)
-sys.path.append(os.path.join(thisdir, ".."))
-
-import pushy, threading, time, unittest
-
-class TestThreading(unittest.TestCase):
-    def setUp(self):
-        self.conn = pushy.connect("local:")
-
-    def test_blocking(self):
-        time_sleep = self.conn.modules.time.sleep
-        t1 = threading.Thread(target=time_sleep, args=(0.5,))
-        t2 = threading.Thread(target=time_sleep, args=(0.5,))
-        before = time.time()
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-        after = time.time()
-        self.assertAlmostEquals(before+1, time.time(), places=1)
+import common
 
 if __name__ == "__main__":
-    unittest.main()
+    connection = common.get_connection()
+    print "Connected to:", connection.server.address
+
+    # Accessing connection.modules.platform is equivalent to importing the
+    # 'platform' module from the remote interpreter.
+    print "The remote host's platform is:", \
+          connection.modules.platform.platform()
 

@@ -21,15 +21,21 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
+"""
+This module provides the code to used to start a remote Pushy server running,
+and initiate a connection.
+"""
+
 import __builtin__, hashlib, imp, marshal, os, sys, marshal, os, struct
 import threading, cPickle as pickle
+
+__all__ = ["PushyPackageLoader", "InMemoryLoader", "InMemoryLoader",
+           "AutoImporter", "PushyClient", "connect"]
 
 class PushyPackageLoader:
     """
     This class loads packages and modules into the format expected by
     PushyServer.InMemoryImporter.
-
-    Author: Andrew Wilkins <axwalk@gmail.com>
     """
     def load(self, *args):
         self.__packages = {}
@@ -118,10 +124,8 @@ class InMemoryImporter:
     Thus, one can load modules on a remote machine without copying the source
     to the machine.
 
-    See PEP 302 for information on custom importers:
-        http://www.python.org/dev/peps/pep-0302/
-
-    Author: Andrew Wilkins <axwalk@gmail.com>
+    See U{PEP 302<http://www.python.org/dev/peps/pep-0302>} for information on
+    custom importers.
     """
 
     def __init__(self, packages, modules):
@@ -154,8 +158,6 @@ class InMemoryImporter:
 class InMemoryLoader:
     """
     Custom "in-memory" package/module loader (used by InMemoryImporter).
-
-    Author: Andrew Wilkins <axwalk@gmail.com>
     """
 
     def __init__(self, fullname, filename, code, path=None):
@@ -283,15 +285,16 @@ def get_transport(target):
 ###############################################################################
 
 class PushyClient:
+    "Client-side Pushy connection initiator."
+
     pushy_packages = None
     packages_lock  = threading.Lock()
 
-    def __init__(self, target, **kwargs):
+    def __init__(self, target, python="python", **kwargs):
         (transport, address) = get_transport(target)
 
         # Start the server
-        python_exe = kwargs.get("python", "python")
-        command = [python_exe, "-u", "-c", serverLoaderSource]
+        command = [python, "-u", "-c", serverLoaderSource]
         kwargs["address"] = address
         self.server = transport.Popen(command, **kwargs)
 
@@ -321,7 +324,11 @@ class PushyClient:
                 self.fs = modules_.os
 
             self.remote  = remote
+            """The L{connection<pushy.protocol.Connection>} for the remote
+               interpreter"""
+
             self.modules = modules_
+            "An instance of L{AutoImporter} for the remote interpreter."
         except:
             import traceback
             traceback.print_exc()
@@ -354,4 +361,20 @@ class PushyClient:
             finally:
                 self.packages_lock.release()
         return self.pushy_packages
+
+
+def connect(target, **kwargs):
+    """
+    Creates a Pushy connection.
+
+    e.g. C{pushy.connect("ssh:somewhere.com", username="me", password="...")}
+
+    @type  target: string
+    @param target: A string specifying the target to connect to, in the format
+                   I{transport}:I{address}.
+    @param kwargs: Any arguments supported by the transport specified by
+                   I{target}.
+    @rtype: L{PushyClient}
+    """
+    return PushyClient(target, **kwargs)
 

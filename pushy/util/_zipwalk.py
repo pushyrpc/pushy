@@ -27,8 +27,6 @@ def zipwalk(zf, subdir=None):
     """
     An os.walk-like function for iterating through the hierarchy of a zip
     archive.
-
-    Author: Andrew Wilkins <axwalk@gmail.com>
     """
 
     root = [{}, []]

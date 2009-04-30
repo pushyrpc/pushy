@@ -23,12 +23,12 @@
 
 """
 Popen-like interface for executing commands on a remote host via SSH.
-
-Author: Andrew Wilkins <axwalk@gmail.com>
 """
 
 import os, paramiko, sys
 import pushy.transport
+
+__all__ = ["ParamikoPopen", "NativePopen", "Popen"]
 
 class SafeSSHClient(paramiko.SSHClient):
     """
@@ -50,11 +50,28 @@ class SafeSSHClient(paramiko.SSHClient):
         self.__dict__[name] = value
 
 class ParamikoPopen(pushy.transport.BaseTransport):
-    def __init__(self, command, **kwargs):
-        pushy.transport.BaseTransport.__init__(self)
+    """
+    An SSH transport for Pushy, which uses Paramiko.
+    """
+
+    def __init__(self, command, address, **kwargs):
+        """
+        @param kwargs: Any parameter that can be passed to
+                       U{paramiko.SSHClient.connect<http://www.lag.net/paramiko/docs/paramiko.SSHClient-class.html#connect>}.
+                         - port
+                         - username
+                         - password
+                         - pkey
+                         - key_filename
+                         - timeout
+                         - allow_agent
+                         - look_for_keys
+        """
+
+        pushy.transport.BaseTransport.__init__(self, address)
         self.__client = SafeSSHClient()
 
-        connect_args = {"hostname": kwargs["address"]}
+        connect_args = {"hostname": address}
         for name in ("port", "username", "password", "pkey", "key_filename",
                      "timeout", "allow_agent", "look_for_keys"):
             if name in kwargs:
@@ -104,15 +121,22 @@ if native_ssh is not None:
     import subprocess
 
     class NativePopen(pushy.transport.BaseTransport):
-        def __init__(self, command, *args, **kwargs):
-            pushy.transport.BaseTransport.__init__(self)
+        """
+        An SSH transport for Pushy, which uses the native ssh or plink program.
+        """
+        def __init__(self, command, address, username=None):
+            """
+            @param address: The hostname/address to connect to.
+            @param username: The username to connect with.
+            """
 
-            hostname = kwargs["address"]
-            if kwargs.has_key("username"):
-                hostname = kwargs["username"] + "@" + hostname
+            pushy.transport.BaseTransport.__init__(self, address)
+
+            if username is not None:
+                address = username + "@" + address
 
             command = ['"%s"' % word for word in command]
-            args = [native_ssh, hostname, " ".join(command)]
+            args = [native_ssh, address, " ".join(command)]
             self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
@@ -137,10 +161,24 @@ if native_ssh is not None:
 # Define Popen.
 
 if native_ssh is not None:
-    def Popen(command, *args, **kwargs):
-        if kwargs.get("use_native", True) and "password" not in kwargs:
+    def Popen(command, use_native=True, password=None, *args, **kwargs):
+        """
+        Selects between the native and Paramiko SSH transports, opting to use
+        the native program where possible.
+
+        @type  use_native: bool
+        @param use_native: If set to False, then the native implementation will
+                           never be used, regardless of whether a password is
+                           specified.
+        @type  password: string
+        @param password: The password to use for authentication. If a password
+                         is not specified, then native ssh/plink program is
+                         used, except if L{use_native} is False.
+        """
+
+        if use_native and password is None:
             return NativePopen(command, *args, **kwargs)
-        return ParamikoPopen(command, *args, **kwargs)
+        return ParamikoPopen(command, password=password, *args, **kwargs)
 else:
     Popen = ParamikoPopen
 

@@ -29,12 +29,10 @@ import pushy.server
 DEFAULT_PORT = pushy.server.DEFAULT_PORT
 
 class Popen(pushy.transport.BaseTransport):
-    def __init__(self, command, **kwargs):
-        pushy.transport.BaseTransport.__init__(self, daemon=True)
+    def __init__(self, command, address, port=DEFAULT_PORT, **kwargs):
+        pushy.transport.BaseTransport.__init__(self, address, daemon=True)
         self.__socket = socket.socket()
-        self.__socket.connect(
-            (kwargs["address"], kwargs.get("port", DEFAULT_PORT)))
-
+        self.__socket.connect(address, port)
         self.stdin  = self.__socket.makefile("wb")
         self.stdout = self.__socket.makefile("rb")
         self.stderr = StringIO.StringIO()

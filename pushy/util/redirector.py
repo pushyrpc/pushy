@@ -27,8 +27,6 @@ class OutputRedirector(threading.Thread):
     """
     A class for reading data from a file and passing it to the "write" method
     of an object.
-
-    Author: Andrew Wilkins <axwalk@gmail.com>
     """
 
     def __init__(self, fileno, bufsize = 8192):

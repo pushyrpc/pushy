@@ -21,12 +21,28 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
+"""
+This module provides functions for starting a Pushy server within an existing
+Python process.
+"""
+
 import asyncore, socket, threading
+
+__all__ = ["DEFAULT_PORT", "serve_forever", "run"]
 
 DEFAULT_PORT = 10101
 
 def serve_forever(stdin, stdout):
-    "Start a Pushy server, for long-lived processes."
+    """
+    Start a Pushy server-side connection for a single client, and processes
+    requests forever.
+
+    @type  stdin: file
+    @param stdin: The reading file for the client.
+    @type  stdout: file
+    @param stdout: The writing file for the client.
+    """
+
     import pushy.protocol
     c = pushy.protocol.Connection(stdin, stdout, False)
     c.serve_forever()
@@ -54,6 +70,8 @@ def run(port = DEFAULT_PORT):
     """
     Start a socket server, which creates Pushy connections as client
     connections come in.
+
+    @param port: The port number to listen on.
     """
 
     server = pushy_server(port)
