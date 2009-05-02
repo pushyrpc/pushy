@@ -32,7 +32,7 @@ class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, port=DEFAULT_PORT, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address, daemon=True)
         self.__socket = socket.socket()
-        self.__socket.connect(address, port)
+        self.__socket.connect((address, port))
         self.stdin  = self.__socket.makefile("wb")
         self.stdout = self.__socket.makefile("rb")
         self.stderr = StringIO.StringIO()

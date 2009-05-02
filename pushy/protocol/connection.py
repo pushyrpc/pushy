@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import marshal, os, struct, threading
+import logging, marshal, os, struct, threading
 from pushy.protocol.message import Message, MessageType
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
@@ -30,7 +30,7 @@ import pushy.util
 #      i.e. set, dict, and list.
 marshallable_types = (
     unicode, slice, frozenset, float, basestring, long, str, int, complex,
-    bool, buffer, list, set
+    bool, buffer, type(None)
 )
 
 
@@ -53,16 +53,26 @@ class LoggingFile:
 
 class Connection:
     def __init__(self, istream, ostream, initiator=True):
-        self.__logfile   = None
         self.__istream   = istream
         self.__ostream   = ostream
         self.__initiator = initiator
         self.__lock      = threading.RLock()
 
         # Uncomment the following for debugging.
-        #self.__logfile = open("pushy.%d.log" % os.getpid(), "w")
         #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
         #self.__ostream = LoggingFile(ostream, open("%d.out"%os.getpid(),"wb"))
+
+        # Set the following to True for logging.
+        if False:
+            if not initiator:
+                if os.path.exists("server.log"):
+                    os.remove("server.log")
+                pushy.util.logger.addHandler(logging.FileHandler("server.log"))
+            else:
+                if os.path.exists("client.log"):
+                    os.remove("client.log")
+                pushy.util.logger.addHandler(logging.FileHandler("client.log"))
+            pushy.util.logger.setLevel(logging.DEBUG)
 
         self.__outstandingRequests = 0
         # (Client) Contains mapping of id(obj) -> proxy
@@ -94,7 +104,7 @@ class Connection:
     def operator(self, type_, id_, args, kwargs):
         self.__lock.acquire()
         try:
-            parameters = self.__marshal((id_, args, kwargs))
+            parameters = self.__marshal((id_, tuple(args), tuple(kwargs.items())))
             self.__outstandingRequests += 1
             self.__send(Message(type_, parameters))
             return self.__waitForResponse()
@@ -166,8 +176,6 @@ class Connection:
                 return payload
             except ValueError: pass
 
-
-
         i = id(obj)
         if i in self.__proxied_objects:
             return "p" + marshal.dumps(i)
@@ -191,8 +199,8 @@ class Connection:
                 obj_type = proxy_result
                 dumps_args = (i, opmask, int(obj_type))
 
-            if self.__logfile is not None:
-                print >> self.__logfile, dumps_args, repr(obj)
+            pushy.util.logger.debug(
+                "Marshalling object: %r, %r", dumps_args, obj)
             return "p" + marshal.dumps(dumps_args, 0)
 
     def __unmarshal(self, payload):
@@ -232,29 +240,17 @@ class Connection:
             raise ValueError, "Invalid payload prefix"
 
     def __send(self, m):
-        if self.__logfile:
-            print >> self.__logfile, "[%d] sending" % (os.getpid()), m
-            self.__logfile.flush()
-
+        pushy.util.logger.debug("Sending message: %r", m)
         self.__ostream.write(m.pack())
         self.__ostream.flush()
 
     def __recv(self):
-        if self.__logfile:
-            print >> self.__logfile, "[%d] waiting for message" % os.getpid()
-            self.__logfile.flush()
-
+        pushy.util.logger.debug("Waiting for message")
         try:
             m = Message.unpack(self.__istream)
+            pushy.util.logger.debug("Received message: %r", m)
         finally:
-            if self.__logfile:
-                print >> self.__logfile, "[%d] receive ended" % os.getpid()
-                self.__logfile.flush()
-
-        if self.__logfile:
-            print >> self.__logfile, "[%d] received" % (os.getpid()), m
-            self.__logfile.flush()
-
+            pushy.util.logger.debug("Receive ended")
         return m
 
     def __send_response(self, result):
@@ -277,13 +273,11 @@ class Connection:
 
             import sys, traceback
             (type, value, tb) = sys.exc_info()
-
-            if self.__logfile is not None:
-                traceback.print_exc(file=self.__logfile)
-            tb = "".join(traceback.format_tb(tb))
-            #print >> efile, "...", repr(type(value)), "..."
+            pushy.util.logger.debug(
+                "Raising an exception", exc_info=(type, value, tb))
 
             # Send the above three objects to the caller
+            tb = "".join(traceback.format_tb(tb))
             self.__send(
                 Message(MessageType.exception,
                                 self.__marshal((type, value, tb))))
@@ -337,13 +331,16 @@ class Connection:
     def __handle_operator(self, name, payload):
         (id_, args, kwargs) = self.__unmarshal(payload)
 
+        # Copy the *args and **kwargs. In particular, the **kwargs dict
+        # must be a real dict, because Python will do a PyDict_CheckExact
+        # somewhere along the line.
+        args, kwargs = list(args), dict(kwargs)
+
         if name == "__call__":
-            # Copy the *args and **kwargs. In particular, the **kwargs dict
-            # must be a real dict, because Python will do a PyDict_CheckExact
-            # somewhere along the line.
-            args, kwargs = list(args), dict(kwargs)
             self.__send_response(self.__proxied_objects[id_](*args, **kwargs))
         else:
-            method = getattr(self.__proxied_objects[id_], name)
+            # TODO handle slot pointer methods specially?
+            obj = self.__proxied_objects[id_]
+            method = getattr(obj, name)
             self.__send_response(method(*args, **kwargs))
 
