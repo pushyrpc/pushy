@@ -50,7 +50,14 @@ class ProxyType:
         if isinstance(obj, Exception):
             return ProxyType.exception
         if isinstance(obj, dict):
-            return (ProxyType.dictionary, obj.keys())
+            args = None
+            if len(obj) > 0:
+                args = tuple(obj.items())
+            return (ProxyType.dictionary, args)
+        if isinstance(obj, list):
+            return (ProxyType.list, tuple(obj))
+        if isinstance(obj, set):
+            return (ProxyType.list, tuple(obj))
         if isinstance(obj, types.ModuleType):
             return ProxyType.module
         return ProxyType.object
@@ -90,13 +97,31 @@ def Proxy(id_, opmask, proxy_type, args, conn):
         class DictionaryProxy(dict):
             def __init__(self):
                 if args is not None:
-                    dict.__init__(self, zip(args, [None]*len(args)))
+                    dict.__init__(self, args)
                 else:
                     dict.__init__(self)
             def __getattribute__(self, name):
                 pushy.util.logger.info("DictionaryProxy.getattr(%s)", name)
                 return conn.getattr(id_, name)
         ProxyClass = DictionaryProxy
+    elif proxy_type == ProxyType.list:
+        pushy.util.logger.info("Got a list type (%r)", args)
+        class ListProxy(list):
+            def __init__(self):
+                list.__init__(self, args)
+            def __getattribute__(self, name):
+                pushy.util.logger.info("ListProxy.getattr(%s)", name)
+                return conn.getattr(id_, name)
+        ProxyClass = ListProxy
+    elif proxy_type == ProxyType.set:
+        pushy.util.logger.info("Got a set type (%r)", args)
+        class SetProxy(set):
+            def __init__(self):
+                set.__init__(self, args)
+            def __getattribute__(self, name):
+                pushy.util.logger.info("SetProxy.getattr(%s)", name)
+                return conn.getattr(id_, name)
+        ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
         pushy.util.logger.info("Got a module type")
         class ModuleProxy(types.ModuleType):
@@ -130,12 +155,12 @@ def Proxy(id_, opmask, proxy_type, args, conn):
         op_index -= 1
 
     # Add __str__ and __repr__ methods
-    #def method(self):
-    #    return conn.getstr(id_)
-    #setattr(ProxyClass, "__str__", method)
-    #def method(self):
-    #    return conn.getrepr(id_)
-    #setattr(ProxyClass, "__repr__", method)
+    def method(self):
+        return conn.getstr(id_)
+    setattr(ProxyClass, "__str__", method)
+    def method(self):
+        return conn.getrepr(id_)
+    setattr(ProxyClass, "__repr__", method)
 
     # Make sure we support the iteration protocol properly
     #if hasattr(ProxyClass, "__iter__"):
@@ -159,6 +184,8 @@ proxy_names = (
   "stopiteration",
   "attributeerror",
   "dictionary",
+  "list",
+  "set",
   "module"
 )
 proxy_types = []

@@ -95,8 +95,6 @@ message_names = (
   "getrepr",
 
   # All object ops go at the end
-  "op__repr__",
-  "op__str__",
   "op__call__",
   "op__lt__",
   "op__le__",

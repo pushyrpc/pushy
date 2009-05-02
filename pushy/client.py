@@ -194,7 +194,7 @@ def pushy_server():
 
     # Add the package to the in-memory package importer
     importer = InMemoryImporter(packages, modules)
-    sys.meta_path.append(importer)
+    sys.meta_path.insert(0, importer)
 
     # Redirect stdout/stderr. We will redirect stdout/stderr to
     # /dev/null to start with, but this behaviour can be overridden
