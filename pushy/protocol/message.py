@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -35,6 +35,8 @@ class MessageType:
         return self.code
     def __str__(self):
         return self.name
+    def __hash__(self):
+        return self.code
     def __eq__(self, other):
         if type(other) is int: return other == self.code
         elif type(other) is str: return other == self.name
