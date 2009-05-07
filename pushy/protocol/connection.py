@@ -33,7 +33,7 @@ class Connection(BaseConnection):
         BaseConnection.__init__(self, istream, ostream, initiator)
 
         # Add message handlers
-        self.handlers.update({
+        self.message_handlers.update({
             MessageType.evaluate:    self.__handle_evaluate,
             MessageType.getattr:     self.__handle_getattr,
             MessageType.setattr:     self.__handle_setattr,
@@ -45,7 +45,7 @@ class Connection(BaseConnection):
             if message_type.name == "__call__":
                 continue
             if message_type.name.startswith("op__"):
-                self.handlers[message_type] = self.__handle_operator
+                self.message_handlers[message_type] = self.__handle_operator
 
     def eval(self, expression):
         return self.send_request(MessageType.evaluate, expression)

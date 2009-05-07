@@ -22,7 +22,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import logging, marshal, os, struct, threading
-from pushy.protocol.message import Message, MessageType
+from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
 
@@ -32,6 +32,11 @@ import pushy.util
 marshallable_types = (
     unicode, slice, frozenset, float, basestring, long, str, int, complex,
     bool, buffer, type(None)
+)
+
+# Message types that may received in response to a request.
+response_types = (
+    MessageType.response, MessageType.exception
 )
 
 
@@ -54,40 +59,48 @@ class LoggingFile:
 
 class ResponseHandler:
     def __init__(self):
-        self.event = threading.Event()
-        self.result = None
+        self.event   = threading.Event()
+        self.message = None
     def wait(self):
-        self.event.wait()
-        return self.message
-    def set(self, result):
-        self.result = result
-        self.event.set()
-    def clear(self):
+        while not self.event.is_set():
+            self.event.wait(1)
         self.event.clear()
-        self.result = None
+        return self.message
+    def set(self, message):
+        self.message = message
+        self.event.set()
 
 
-class BaseConnection:
+class BaseConnection(threading.Thread):
     def __init__(self, istream, ostream, initiator=True):
+        threading.Thread.__init__(self)
+        self.__open              = True
         self.__istream           = istream
         self.__ostream           = ostream
         self.__initiator         = initiator
         self.__lock              = threading.RLock()
+
+        # Define message handlers (MessageType -> method)
+        self.message_handlers = {
+            MessageType.response:    self.__handle_response,
+            MessageType.exception:   self.__handle_exception,
+            MessageType.syncrequest: self.__handle_syncrequest
+        }
+
+        # Attributes required to track responses.
+        self.__thread_local      = threading.local()
         self.__response_handlers = []
-        self.__requests          = []
+
+        # Attributes required to track requests.
+        self.__requests           = []
+        self.__requests_condition = threading.Condition()
 
         # Uncomment the following for debugging.
         #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
         #self.__ostream = LoggingFile(ostream, open("%d.out"%os.getpid(),"wb"))
 
-        # Define message handlers.
-        self.handlers = {
-            MessageType.exception: self.__handle_exception,
-            MessageType.response:  self.__handle_response
-        }
-
         # Set the following to True for logging.
-        if False:
+        if True:
             if not initiator:
                 if os.path.exists("server.log"):
                     os.remove("server.log")
@@ -98,7 +111,6 @@ class BaseConnection:
                 pushy.util.logger.addHandler(logging.FileHandler("client.log"))
             pushy.util.logger.setLevel(logging.DEBUG)
 
-        self.__outstandingRequests = 0
         # (Client) Contains mapping of id(obj) -> proxy
         self.__proxies = {}
         # (Client) Contains mapping of id(proxy) -> id(obj)
@@ -106,40 +118,143 @@ class BaseConnection:
         # (Server) Contains mapping of id(obj) -> obj
         self.__proxied_objects = {}
 
+        # Start this thread running, which will poll for incoming messages.
+        self.start()
+
+    def __del__(self):
+        if self.__open:
+            self.close()
+
+    def close(self, join=True):
+        pushy.util.logger.debug("entered close")
+        self.__requests_condition.acquire()
+        pushy.util.logger.debug("got lock")
+        try:
+            if self.__open:
+                self.__open = False
+                self.__requests = []
+                os.close(self.__istream.fileno())
+                pushy.util.logger.debug("closed istream")
+                os.close(self.__ostream.fileno())
+                pushy.util.logger.debug("closed ostream")
+                self.__requests_condition.notify_all()
+        except:
+            import traceback
+            traceback.print_exc()
+            pushy.util.logger.debug(format_exc())
+        finally:
+            self.__requests_condition.release()
+            if join:
+                pushy.util.logger.debug("waiting for join")
+                self.join()
+        pushy.util.logger.debug("leaving close")
+
+    def run(self):
+        "Poll for incoming messages."
+        while self.__open:
+            try:
+                pushy.util.logger.debug("top of loop")
+                m = self.__recv()
+                pushy.util.logger.debug("after receive")
+                if m.type in response_types:
+                    response_handler = self.__response_handlers.pop()
+                    response_handler.set(m)
+                elif m.type is MessageType.syncrequest:
+                    response_handler = self.__response_handlers[-1]
+                    response_handler.set(m)
+                else:
+                    self.__requests_condition.acquire()
+                    try:
+                        self.__requests.append(m)
+                        self.__requests_condition.notify()
+                    finally:
+                        self.__requests_condition.release()
+            except IOError:
+                import traceback
+                pushy.util.logger.critical(traceback.format_exc())
+                self.close(join=False)
+                return
+            except:
+                import traceback
+                pushy.util.logger.critical(traceback.format_exc())
+                self.close(join=False)
+                raise
+            finally:
+                pushy.util.logger.debug("bottom of loop")
+
     def serve_forever(self):
-        #handler = MessageHandler()
-        while True:
+        "Serve asynchronous requests from the peer forever."
+        while self.__open:
             try:
                 self.serve()
-            except IOError: return
+            except IOError:
+                pushy.util.logger.debug("IOError")
+                return
+            except:
+                import traceback
+                pushy.util.logger.critical(traceback.format_exc())
+                raise
 
-    def serve(self, handler=None):
-        #if handler is None:
-        #    handler = MessageHandler()
-        self.__handle(self.__recv())
+    def serve(self):
+        "Serve an asynchronous request from the peer."
+        request = None
+
+        # Wait for an asynchronous request.
+        self.__requests_condition.acquire()
+        try:
+            while self.__open and len(self.__requests) == 0:
+                self.__requests_condition.wait(1)
+            if self.__open:
+                request = self.__requests[0]
+                del self.__requests[0]
+        except:
+            pushy.util.logger.debug("error occurred")
+            raise
+        finally:
+            self.__requests_condition.release()
+
+        if request is not None:
+            self.__handle(request)
 
     def send_request(self, message_type, args):
-        "Send a message and wait for a response."
+        "Send a request message and wait for a response."
         self.__lock.acquire()
         try:
-            self.__outstandingRequests += 1
+            # Push a new response handler onto the stack.
+            handler = ResponseHandler()
+            self.__response_handlers.append(handler)
+
+            # Send the request. Send it as a 'syncrequest' if the request
+            # is made from the handler of a request from the peer.
+            if getattr(self.__thread_local, "request_count", 0) > 0:
+                pushy.util.logger.debug("Converting to a syncrequest")
+                args = (message_type.code, self.__marshal(args))
+                message_type = MessageType.syncrequest
             self.__send_message(message_type, args)
-            return self.__waitForResponse()
+
+            # Wait for the response handler to be signalled.
+            return self.__waitForResponse(handler)
         finally:
             self.__lock.release()
 
     def send_response(self, result):
+        pushy.util.logger.debug("send_response")
         self.__lock.acquire()
         try:
             self.__send_message(MessageType.response, result)
         finally:
+            pushy.util.logger.debug("sent_response")
             self.__lock.release()
 
-    def __waitForResponse(self):
-        res = None
-        while self.__outstandingRequests > 0:
-            res = self.__handle(self.__recv())
-        return res
+    def __waitForResponse(self, handler):
+        # Wait for the response handler to be signaled. The handler will be
+        # signaled multiple times if requests come back from the peer. The
+        # end is marked by a response/exception.
+        m = handler.wait()
+        while m.type not in response_types:
+            self.__handle(m)
+            m = handler.wait()
+        return self.__handle(m)
 
     def __marshal(self, obj):
         # XXX perhaps we can check refcount to optimise (if 1, immutable)
@@ -183,8 +298,8 @@ class BaseConnection:
                 obj_type = proxy_result
                 dumps_args = (i, opmask, int(obj_type))
 
-            pushy.util.logger.debug(
-                "Marshalling object: %r, %r", dumps_args, obj)
+            #pushy.util.logger.debug(
+            #    "Marshalling object: %r, %r", dumps_args, obj)
             return "p" + marshal.dumps(dumps_args, 0)
 
     def __unmarshal(self, payload):
@@ -224,9 +339,12 @@ class BaseConnection:
             raise ValueError, "Invalid payload prefix"
 
     def __send_message(self, message_type, args):
+        pushy.util.logger.debug("Sending %r", message_type)
         m = Message(message_type, self.__marshal(args))
-        self.__ostream.write(m.pack())
+        bytes = m.pack()
+        self.__ostream.write(bytes)
         self.__ostream.flush()
+        pushy.util.logger.debug("Sent %r [%d bytes]", message_type, len(bytes))
 
     def __recv(self):
         pushy.util.logger.debug("Waiting for message")
@@ -238,11 +356,19 @@ class BaseConnection:
             pushy.util.logger.debug("Receive ended")
 
     def __handle(self, m):
+        # Track the number of requests being processed in this thread. May be
+        # greater than one, if there is to-and-fro. We need to track this so
+        # we know when to send a 'syncrequest' message.
+        is_request = m.type not in response_types
+        if is_request:
+            if hasattr(self.__thread_local, "request_count"):
+                self.__thread_local.request_count += 1
+            else:
+                self.__thread_local.request_count = 1
+
         try:
-            if m.type in (MessageType.response, MessageType.exception):
-                self.__outstandingRequests -= 1
             args = self.__unmarshal(m.payload)
-            return self.handlers[m.type](m.type, args)
+            return self.message_handlers[m.type](m.type, args)
         except SystemExit, e:
             self.send_response(e.code)
             raise e
@@ -264,21 +390,25 @@ class BaseConnection:
             #
             # http://docs.python.org/lib/module-sys.html#l2h-5142
             del type, value, tb
+        finally:
+            if is_request:
+                self.__thread_local.request_count -= 1
 
     def __handle_response(self, message_type, result):
         return result
 
-    def __handle_exception(self, type, e):
-        # If the peer called us back when we called them, then we need to throw
-        # the exception back to them.
-        #
-        # XXX: there's got to be a better way to do this safely. At the very
-        #      least we can store the exception if the peer will potentially
-        #      rethrow, in which case the client will send a "rethrow" message,
-        #      and avoid repetitious marshalling/unmarshalling of exceptions.
-
-        if self.__outstandingRequests > 0:
-            self.__send_message(MessageType.exception, e)
+    def __handle_exception(self, message_type, e):
+        # If the peer called us back when we called them, then we need
+        # to throw the exception back to them.
+        if len(self.__response_handlers) > 0:
+            self.__send_message(MessageType.exception, self.__marshal(e))
         else:
             raise e[1]
+
+    def __handle_syncrequest(self, message_type, args):
+        "Synchronous requests (i.e. requests in response to another request.)"
+        real_message_type_code, payload = args
+        real_message_type = message_types[real_message_type_code]
+        return self.message_handlers[real_message_type](
+                   real_message_type, payload)
 

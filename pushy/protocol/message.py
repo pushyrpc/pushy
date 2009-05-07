@@ -21,7 +21,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import struct
+import os, struct
+import pushy.util
 
 class MessageType:
     "A class for describing the type of a message."
@@ -68,7 +69,10 @@ class Message:
     def unpack(file):
         data = ""
         while len(data) < Message.PACKING_SIZE:
+            pushy.util.logger.debug(
+                "Reading %d bytes", Message.PACKING_SIZE-len(data))
             partial = file.read(Message.PACKING_SIZE - len(data))
+            pushy.util.logger.debug("Received %d bytes", len(partial))
             if partial == "":
                 raise IOError
             data += partial
@@ -90,6 +94,7 @@ class Message:
 message_names = (
   "evaluate",
   "response",
+  "syncrequest",
   "exception",
   "getattr",
   "setattr",

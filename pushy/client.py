@@ -186,8 +186,10 @@ def pushy_server():
     import pickle, sys
 
     # Back up old stdin/stdout.
-    old_stdout = os.fdopen(os.dup(sys.stdout.fileno()), "wb", 0)
+    stdout_fileno = sys.stdout.fileno()
+    old_stdout = os.fdopen(os.dup(stdout_fileno), "wb", 0)
     try_set_binary(old_stdout.fileno())
+    sys.stdout.close()
 
     # Reconstitute the package hierarchy delivered from the client
     (packages, modules) = pickle.load(sys.stdin)
@@ -202,7 +204,7 @@ def pushy_server():
     import pushy.util
     (so_r, so_w) = os.pipe()
     (se_r, se_w) = os.pipe()
-    os.dup2(so_w, sys.__stdout__.fileno())
+    os.dup2(so_w, stdout_fileno)
     os.dup2(se_w, sys.__stderr__.fileno())
     for f in (so_r, so_w, se_r, se_w):
         try_set_binary(f)
@@ -212,9 +214,17 @@ def pushy_server():
     pushy.util.StderrRedirector(se_r).start()
 
     # Start the request servicing loop
-    import pushy.protocol
-    c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
-    c.serve_forever()
+    try:
+        import pushy.protocol
+        import pushy.util
+        c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
+        c.serve_forever()
+    finally:
+        pushy.util.logger.debug("All done.")
+        sys.stdin.close()
+        pushy.util.logger.debug("All done.")
+        old_stdout.close()
+        pushy.util.logger.debug("All done.")
 
 ###############################################################################
 
@@ -342,6 +352,8 @@ class PushyClient:
     def __del__(self):
         if hasattr(self, "server"):
             del self.server
+            if hasattr(self, "remote"):
+                self.remote.close()
 
     def __getattr__(self, name):
         if name == "server":
