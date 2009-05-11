@@ -31,6 +31,8 @@ import pushy, unittest
 class TestAttrs(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_hasattr(self):
         self.assertTrue(hasattr(self.conn.modules.sys, "stdout"))

@@ -31,6 +31,8 @@ import pushy, unittest
 class TestDict(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_setitem(self):
         "Ensure we can set items in a remote dictionary."

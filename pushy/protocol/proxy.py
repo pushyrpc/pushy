@@ -93,7 +93,6 @@ def Proxy(id_, opmask, proxy_type, args, conn):
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
-        pushy.util.logger.info("Got a dictionary type (%r)", args)
         class DictionaryProxy(dict):
             def __init__(self):
                 if args is not None:
@@ -101,39 +100,31 @@ def Proxy(id_, opmask, proxy_type, args, conn):
                 else:
                     dict.__init__(self)
             def __getattribute__(self, name):
-                pushy.util.logger.info("DictionaryProxy.getattr(%s)", name)
                 return conn.getattr(self, name)
         ProxyClass = DictionaryProxy
     elif proxy_type == ProxyType.list:
-        pushy.util.logger.info("Got a list type (%r)", args)
         class ListProxy(list):
             def __init__(self):
                 list.__init__(self, args)
             def __getattribute__(self, name):
-                pushy.util.logger.info("ListProxy.getattr(%s)", name)
                 return conn.getattr(self, name)
         ProxyClass = ListProxy
     elif proxy_type == ProxyType.set:
-        pushy.util.logger.info("Got a set type (%r)", args)
         class SetProxy(set):
             def __init__(self):
                 set.__init__(self, args)
             def __getattribute__(self, name):
-                pushy.util.logger.info("SetProxy.getattr(%s)", name)
                 return conn.getattr(self, name)
         ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
-        pushy.util.logger.info("Got a module type")
         class ModuleProxy(types.ModuleType):
             def __init__(self): types.ModuleType.__init__(self, "")
             def __getattribute__(self, name):
-                pushy.util.logger.info("ModuleProxy.getattr(%s)", name)
                 return conn.getattr(self, name)
         ProxyClass = ModuleProxy
     else:
         class ObjectProxy(object):
             def __getattribute__(self, name):
-                pushy.util.logger.info("getattr(%s)", name)
                 return conn.getattr(self, name)
         ProxyClass = ObjectProxy
 
@@ -175,12 +166,9 @@ def Proxy(id_, opmask, proxy_type, args, conn):
         return conn.setattr(self, name, value)
     setattr(ProxyClass, "__setattr__", method)
 
-    pushy.util.logger.debug("Creating proxy")
     proxy = ProxyClass()
-    pushy.util.logger.debug("Created proxy")
     for operator in operators:
         operator.object = proxy
-    pushy.util.logger.debug("Set operators")
     return proxy
 
 ###############################################################################

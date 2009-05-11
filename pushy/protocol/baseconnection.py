@@ -74,10 +74,14 @@ class ResponseHandler:
 class BaseConnection(threading.Thread):
     def __init__(self, istream, ostream, initiator=True):
         threading.Thread.__init__(self)
+        #self.setDaemon(True)
+
         self.__open              = True
         self.__istream           = istream
         self.__ostream           = ostream
         self.__initiator         = initiator
+        self.__istream_lock      = threading.Lock()
+        self.__ostream_lock      = threading.Lock()
         self.__lock              = threading.RLock()
 
         # Define message handlers (MessageType -> method)
@@ -98,18 +102,6 @@ class BaseConnection(threading.Thread):
         # Uncomment the following for debugging.
         #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
         #self.__ostream = LoggingFile(ostream, open("%d.out"%os.getpid(),"wb"))
-
-        # Set the following to True for logging.
-        if True:
-            if not initiator:
-                if os.path.exists("server.log"):
-                    os.remove("server.log")
-                pushy.util.logger.addHandler(logging.FileHandler("server.log"))
-            else:
-                if os.path.exists("client.log"):
-                    os.remove("client.log")
-                pushy.util.logger.addHandler(logging.FileHandler("client.log"))
-            pushy.util.logger.setLevel(logging.DEBUG)
 
         # (Client) Contains mapping of id(obj) -> proxy
         self.__proxies = {}
@@ -133,15 +125,21 @@ class BaseConnection(threading.Thread):
             if self.__open:
                 self.__open = False
                 self.__requests = []
-                os.close(self.__istream.fileno())
-                pushy.util.logger.debug("closed istream")
-                os.close(self.__ostream.fileno())
-                pushy.util.logger.debug("closed ostream")
+                self.__ostream_lock.acquire()
+                try:
+                    self.__ostream.close()
+                finally:
+                    self.__ostream_lock.release()
+                self.__istream_lock.acquire()
+                try:
+                    self.__istream.close()
+                finally:
+                    self.__istream_lock.release()
                 self.__requests_condition.notify_all()
         except:
             import traceback
             traceback.print_exc()
-            pushy.util.logger.debug(format_exc())
+            pushy.util.logger.debug(traceback.format_exc())
         finally:
             self.__requests_condition.release()
             if join:
@@ -238,12 +236,10 @@ class BaseConnection(threading.Thread):
             self.__lock.release()
 
     def send_response(self, result):
-        pushy.util.logger.debug("send_response")
         self.__lock.acquire()
         try:
             self.__send_message(MessageType.response, result)
         finally:
-            pushy.util.logger.debug("sent_response")
             self.__lock.release()
 
     def __waitForResponse(self, handler):
@@ -342,18 +338,24 @@ class BaseConnection(threading.Thread):
         pushy.util.logger.debug("Sending %r", message_type)
         m = Message(message_type, self.__marshal(args))
         bytes = m.pack()
-        self.__ostream.write(bytes)
-        self.__ostream.flush()
+        self.__ostream_lock.acquire()
+        try:
+            self.__ostream.write(bytes)
+            self.__ostream.flush()
+        finally:
+            self.__ostream_lock.release()
         pushy.util.logger.debug("Sent %r [%d bytes]", message_type, len(bytes))
 
     def __recv(self):
         pushy.util.logger.debug("Waiting for message")
+        self.__istream_lock.acquire()
         try:
             m = Message.unpack(self.__istream)
             pushy.util.logger.debug("Received %r", m.type)
             return m
         finally:
             pushy.util.logger.debug("Receive ended")
+            self.__istream_lock.release()
 
     def __handle(self, m):
         # Track the number of requests being processed in this thread. May be
@@ -410,5 +412,5 @@ class BaseConnection(threading.Thread):
         real_message_type_code, payload = args
         real_message_type = message_types[real_message_type_code]
         return self.message_handlers[real_message_type](
-                   real_message_type, payload)
+                   real_message_type, self.__unmarshal(payload))
 

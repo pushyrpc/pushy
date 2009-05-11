@@ -220,11 +220,8 @@ def pushy_server():
         c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
         c.serve_forever()
     finally:
-        pushy.util.logger.debug("All done.")
-        sys.stdin.close()
-        pushy.util.logger.debug("All done.")
         old_stdout.close()
-        pushy.util.logger.debug("All done.")
+        sys.stdin.close()
 
 ###############################################################################
 
@@ -294,6 +291,8 @@ def get_transport(target):
 
 ###############################################################################
 
+logid = 0
+
 class PushyClient:
     "Client-side Pushy connection initiator."
 
@@ -350,6 +349,7 @@ class PushyClient:
             raise
 
     def __del__(self):
+        print "~Client"
         if hasattr(self, "server"):
             del self.server
             if hasattr(self, "remote"):
@@ -358,10 +358,10 @@ class PushyClient:
     def __getattr__(self, name):
         if name == "server":
             if hasattr(self, "server"):
-                return getattr(self, "server")
+                return self.server
             else:
                 raise AttributeError
-        return getattr(getattr(self, "remote"), name)
+        return getattr(self.remote, name)
 
     def load_packages(self):
         if self.pushy_packages is None:
@@ -373,6 +373,29 @@ class PushyClient:
             finally:
                 self.packages_lock.release()
         return self.pushy_packages
+
+    def enable_logging(self, client=True, server=False):
+        global logid
+        logid += 1
+
+        if client:
+            import pushy.util, logging
+            filename = "pushy-client.%d.log" % logid
+            if os.path.exists(filename):
+                os.remove(filename)
+            pushy.util.logger.addHandler(logging.FileHandler(filename))
+            pushy.util.logger.setLevel(logging.DEBUG)
+            pushy.util.logger.disabled = False
+
+        if server:
+            filename = "pushy-server.%d.log" % logid
+            ros = self.modules.os
+            if ros.path.exists(filename):
+                ros.remove(filename)
+            self.modules.pushy.util.logger.addHandler(
+                self.modules.logging.FileHandler(filename))
+            self.modules.pushy.util.logger.setLevel(self.modules.logging.DEBUG)
+            pushy.util.logger.disabled = True
 
 
 def connect(target, **kwargs):

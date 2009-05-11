@@ -26,6 +26,7 @@ import logging, marshal, os, struct, threading
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
+import platform
 
 
 class Connection(BaseConnection):
@@ -42,7 +43,7 @@ class Connection(BaseConnection):
             MessageType.op__call__:  self.__handle_call,
         })
         for message_type in message_types:
-            if message_type.name == "__call__":
+            if message_type.name == "op__call__":
                 continue
             if message_type.name.startswith("op__"):
                 self.message_handlers[message_type] = self.__handle_operator
@@ -83,14 +84,15 @@ class Connection(BaseConnection):
     def __handle_evaluate(self, type, expression):
         self.send_response(eval(expression))
 
-    def __handle_call(self, type, args):
-        (object, args, kwargs) = args
+    def __handle_call(self, type, args_):
+        (object, args, kwargs) = args_
 
         # Copy the *args and **kwargs. In particular, the **kwargs dict
         # must be a real dict, because Python will do a PyDict_CheckExact
         # somewhere along the line.
         args, kwargs = list(args), dict(kwargs)
-        self.send_response(object(*args, **kwargs))
+        result = object(*args, **kwargs)
+        self.send_response(result)
 
     def __handle_operator(self, type, args):
         (object, args, kwargs) = args

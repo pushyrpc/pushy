@@ -58,6 +58,7 @@ class pushy_server(asyncore.dispatcher):
 
     def handle_accept(self):
         (sock,addr) = self.accept()
+        sock.setblocking(1)
         stdin = sock.makefile("rb")
         stdout = sock.makefile("wb")
         threading.Thread(target=serve_forever, args=(stdin,stdout)).start()
@@ -79,5 +80,7 @@ def run(port = DEFAULT_PORT):
         asyncore.loop()
 
 if __name__ == "__main__":
+    import pushy.util, logging
+    pushy.util.logger.addHandler(logging.StreamHandler())
     run()
 
