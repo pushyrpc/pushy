@@ -62,7 +62,7 @@ class ResponseHandler:
         self.event   = threading.Event()
         self.message = None
     def wait(self):
-        while not self.event.is_set():
+        while not self.event.isSet():
             self.event.wait(1)
         self.event.clear()
         return self.message
@@ -135,7 +135,7 @@ class BaseConnection(threading.Thread):
                     self.__istream.close()
                 finally:
                     self.__istream_lock.release()
-                self.__requests_condition.notify_all()
+                self.__requests_condition.notifyAll()
         except:
             import traceback
             traceback.print_exc()

@@ -21,13 +21,15 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, subprocess
+import os, subprocess, sys
 
 import pushy.transport
 
 class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address)
+
+        command[0] = sys.executable
         self.__proc = subprocess.Popen(command, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)

@@ -43,9 +43,13 @@ def serve_forever(stdin, stdout):
     @param stdout: The writing file for the client.
     """
 
-    import pushy.protocol
+    import pushy.protocol, pushy.util
     c = pushy.protocol.Connection(stdin, stdout, False)
-    c.serve_forever()
+    try:
+        c.serve_forever()
+    finally:
+        pushy.util.logger.debug("Closing connection")
+        c.close()
 
 
 class pushy_server(asyncore.dispatcher):
