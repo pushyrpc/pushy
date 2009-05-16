@@ -23,10 +23,11 @@
 
 import logging, os, sys
 logger = logging.getLogger("pushy")
-logger.addHandler(logging.FileHandler("pushy.%d.log" % os.getpid()))
-logger.setLevel(logging.DEBUG)
-logger.debug("sys.argv: %r", sys.argv)
-#logger.disabled = True
+logger.disabled = True
+if not logger.disabled:
+    logger.addHandler(logging.FileHandler("pushy.%d.log" % os.getpid()))
+    logger.setLevel(logging.DEBUG)
+    logger.debug("sys.argv: %r", sys.argv)
 
 #import socket
 #import ctypes

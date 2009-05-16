@@ -59,11 +59,12 @@ class LoggingFile:
 
 class ResponseHandler:
     def __init__(self):
-        self.event   = threading.Event()
-        self.message = None
+        self.event       = threading.Event()
+        self.message     = None
+        self.syncrequest = False
     def wait(self):
         while not self.event.isSet():
-            self.event.wait(1)
+            self.event.wait()
         self.event.clear()
         return self.message
     def set(self, message):
@@ -71,18 +72,16 @@ class ResponseHandler:
         self.event.set()
 
 
-class BaseConnection(threading.Thread):
+class BaseConnection:
     def __init__(self, istream, ostream, initiator=True):
-        threading.Thread.__init__(self)
-        #self.setDaemon(True)
-
-        self.__open              = True
-        self.__istream           = istream
-        self.__ostream           = ostream
-        self.__initiator         = initiator
-        self.__istream_lock      = threading.Lock()
-        self.__ostream_lock      = threading.Lock()
-        self.__lock              = threading.RLock()
+        self.__open         = True
+        self.__istream      = istream
+        self.__ostream      = ostream
+        self.__initiator    = initiator
+        self.__istream_lock = threading.Lock()
+        self.__ostream_lock = threading.Lock()
+        self.__request_lock = threading.Lock()
+        self.__marshal_lock = threading.Lock()
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
@@ -92,12 +91,20 @@ class BaseConnection(threading.Thread):
         }
 
         # Attributes required to track responses.
-        self.__thread_local      = threading.local()
-        self.__response_handlers = []
+        self.__thread_local          = threading.local()
+        self.__response_handlers     = []
+        self.__response_handler_lock = threading.Lock()
 
         # Attributes required to track requests.
         self.__requests           = []
-        self.__requests_condition = threading.Condition()
+        self.__requests_condition = threading.Condition(threading.Lock())
+
+        # Attributes required to track number of threads processing requests.
+        # The message receiving thread may only attempt to receive a message
+        # when there are 0 threads processing events and not waiting for a
+        # response from a syncrequest.
+        self.__processing = 0
+        self.__processing_condition = threading.Condition(threading.Lock())
 
         # Uncomment the following for debugging.
         #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
@@ -110,17 +117,20 @@ class BaseConnection(threading.Thread):
         # (Server) Contains mapping of id(obj) -> obj
         self.__proxied_objects = {}
 
-        # Start this thread running, which will poll for incoming messages.
-        self.start()
+        # Start a thread which will poll for incoming messages.
+        self.__receive_thread = \
+            threading.Thread(target=self.receive_messages)
+        self.__receive_thread.start()
+
 
     def __del__(self):
         if self.__open:
             self.close()
 
+
     def close(self, join=True):
-        pushy.util.logger.debug("entered close")
+        pushy.util.logger.debug("Closing connection")
         self.__requests_condition.acquire()
-        pushy.util.logger.debug("got lock")
         try:
             if self.__open:
                 self.__open = False
@@ -128,11 +138,13 @@ class BaseConnection(threading.Thread):
                 self.__ostream_lock.acquire()
                 try:
                     self.__ostream.close()
+                    pushy.util.logger.debug("Closed ostream")
                 finally:
                     self.__ostream_lock.release()
                 self.__istream_lock.acquire()
                 try:
                     self.__istream.close()
+                    pushy.util.logger.debug("Closed istream")
                 finally:
                     self.__istream_lock.release()
                 self.__requests_condition.notifyAll()
@@ -143,42 +155,63 @@ class BaseConnection(threading.Thread):
         finally:
             self.__requests_condition.release()
             if join:
-                pushy.util.logger.debug("waiting for join")
-                self.join()
-        pushy.util.logger.debug("leaving close")
+                self.__receive_thread.join()
 
-    def run(self):
+
+    def receive_messages(self):
         "Poll for incoming messages."
         while self.__open:
+            self.__processing_condition.acquire()
             try:
-                pushy.util.logger.debug("top of loop")
+                pushy.util.logger.debug(
+                    "Waiting until we are allowed to read a message")
+
+                while self.__open and self.__processing > 0:
+                    self.__processing_condition.wait()
+                if not self.__open:
+                    return
+
                 m = self.__recv()
-                pushy.util.logger.debug("after receive")
                 if m.type in response_types:
-                    response_handler = self.__response_handlers.pop()
+                    self.__response_handler_lock.acquire()
+                    try:
+                        response_handler = self.__response_handlers[0]
+                        del self.__response_handlers[0]
+                    finally:
+                        self.__response_handler_lock.release()
                     response_handler.set(m)
+                    if response_handler.syncrequest:
+                        self.__processing += 1
                 elif m.type is MessageType.syncrequest:
-                    response_handler = self.__response_handlers[-1]
+                    self.__response_handler_lock.acquire()
+                    try:
+                        response_handler = self.__response_handlers[0]
+                    finally:
+                        self.__response_handler_lock.release()
                     response_handler.set(m)
+                    self.__processing += 1
                 else:
+                    self.__processing += 1
                     self.__requests_condition.acquire()
                     try:
                         self.__requests.append(m)
                         self.__requests_condition.notify()
                     finally:
                         self.__requests_condition.release()
+                self.__processing_condition.release()
             except IOError:
                 import traceback
                 pushy.util.logger.critical(traceback.format_exc())
+                self.__processing_condition.release()
                 self.close(join=False)
                 return
             except:
                 import traceback
                 pushy.util.logger.critical(traceback.format_exc())
+                self.__processing_condition.release()
                 self.close(join=False)
                 raise
-            finally:
-                pushy.util.logger.debug("bottom of loop")
+
 
     def serve_forever(self):
         "Serve asynchronous requests from the peer forever."
@@ -192,6 +225,7 @@ class BaseConnection(threading.Thread):
                 import traceback
                 pushy.util.logger.critical(traceback.format_exc())
                 raise
+
 
     def serve(self):
         "Serve an asynchronous request from the peer."
@@ -214,33 +248,68 @@ class BaseConnection(threading.Thread):
         if request is not None:
             self.__handle(request)
 
+
     def send_request(self, message_type, args):
         "Send a request message and wait for a response."
-        self.__lock.acquire()
+        self.__request_lock.acquire()
         try:
-            # Push a new response handler onto the stack.
-            handler = ResponseHandler()
-            self.__response_handlers.append(handler)
-
             # Send the request. Send it as a 'syncrequest' if the request
             # is made from the handler of a request from the peer.
             if getattr(self.__thread_local, "request_count", 0) > 0:
-                pushy.util.logger.debug("Converting to a syncrequest")
+                pushy.util.logger.debug(
+                    "Converting %r to a syncrequest", message_type)
                 args = (message_type.code, self.__marshal(args))
                 message_type = MessageType.syncrequest
-            self.__send_message(message_type, args)
 
-            # Wait for the response handler to be signalled.
-            return self.__waitForResponse(handler)
+            # Create a new response handler.
+            handler = ResponseHandler()
+
+            # If the a syncrequest is made, then reduce the 'processing'
+            # count, so the message receiving thread may attempt to
+            # receive messages.
+            if message_type == MessageType.syncrequest:
+                handler.syncrequest = True
+                self.__processing_condition.acquire()
+                try:
+                    self.__processing -= 1
+                    if self.__processing == 0:
+                        self.__processing_condition.notify()
+                finally:
+                    self.__processing_condition.release()
+
+            # The handler and the request message need to be added and sent in
+            # the same order.
+            self.__response_handler_lock.acquire()
+            try:
+                self.__response_handlers.append(handler)
+                self.__send_message(message_type, args)
+            finally:
+                self.__response_handler_lock.release()
         finally:
-            self.__lock.release()
+            self.__request_lock.release()
+
+        # Wait for the response handler to be signalled.
+        return self.__waitForResponse(handler)
+
 
     def send_response(self, result):
-        self.__lock.acquire()
+        pushy.util.logger.debug("send_response")
+        # Allow the message receiving thread to proceed. We must do this
+        # *before* sending the message, in case the other side is
+        # attempting to send a message at the same time.
+        pushy.util.logger.debug("waiting for lock")
+        self.__processing_condition.acquire()
         try:
-            self.__send_message(MessageType.response, result)
+            self.__processing -= 1
+            if self.__processing == 0:
+                self.__processing_condition.notify()
         finally:
-            self.__lock.release()
+            self.__processing_condition.release()
+
+        # Now send the message.
+        pushy.util.logger.debug("sending message")
+        self.__send_message(MessageType.response, result)
+
 
     def __waitForResponse(self, handler):
         # Wait for the response handler to be signaled. The handler will be
@@ -251,6 +320,7 @@ class BaseConnection(threading.Thread):
             self.__handle(m)
             m = handler.wait()
         return self.__handle(m)
+
 
     def __marshal(self, obj):
         # XXX perhaps we can check refcount to optimise (if 1, immutable)
@@ -272,31 +342,43 @@ class BaseConnection(threading.Thread):
             except ValueError: pass
 
         i = id(obj)
-        if i in self.__proxied_objects:
-            return "p" + marshal.dumps(i)
-        elif i in self.__proxy_ids:
-            # Object originates at the peer.
-            return "o" + marshal.dumps(self.__proxy_ids[i])
-        else:
-            # Create new entry in proxy objects map:
-            #    id -> (obj, refcount, opmask[, args])
-            #
-            # opmask is a bitmask defining whether or not the object
-            # defines various methods (__add__, __iter__, etc.)
-            opmask = get_opmask(obj)
-            proxy_result = ProxyType.get(obj)
-            self.__proxied_objects[i] = obj
-
-            if type(proxy_result) is tuple:
-                obj_type, args = proxy_result
-                dumps_args = (i, opmask, int(obj_type), self.__marshal(args))
+        self.__marshal_lock.acquire()
+        try:
+            if i in self.__proxied_objects:
+                return "p" + marshal.dumps(i)
+            elif i in self.__proxy_ids:
+                # Object originates at the peer.
+                return "o" + marshal.dumps(self.__proxy_ids[i])
             else:
-                obj_type = proxy_result
-                dumps_args = (i, opmask, int(obj_type))
+                # Temporarily release the lock.
+                self.__marshal_lock.release()
 
-            #pushy.util.logger.debug(
-            #    "Marshalling object: %r, %r", dumps_args, obj)
-            return "p" + marshal.dumps(dumps_args, 0)
+                # Create new entry in proxy objects map:
+                #    id -> (obj, refcount, opmask[, args])
+                #
+                # opmask is a bitmask defining whether or not the object
+                # defines various methods (__add__, __iter__, etc.)
+                try:
+                    opmask = get_opmask(obj)
+                    proxy_result = ProxyType.get(obj)
+    
+                    if type(proxy_result) is tuple:
+                        obj_type, args = proxy_result
+                        dumps_args = \
+                            (i, opmask, int(obj_type), self.__marshal(args))
+                    else:
+                        obj_type = proxy_result
+                        dumps_args = (i, opmask, int(obj_type))
+                finally:
+                    # Reacquire lock.
+                    self.__marshal_lock.acquire()
+
+                # Store the result.
+                self.__proxied_objects[i] = obj
+                return "p" + marshal.dumps(dumps_args, 0)
+        finally:
+            self.__marshal_lock.release()
+
 
     def __unmarshal(self, payload):
         if payload.startswith("s"):
@@ -321,18 +403,31 @@ class BaseConnection(threading.Thread):
                 if len(id_) >= 4:
                     args = self.__unmarshal(id_[3])
                 p = Proxy(id_[0], id_[1], id_[2], args, self)
-                self.__proxies[id_[0]] = p
-                self.__proxy_ids[id(p)] = id_[0]
+                self.__marshal_lock.acquire()
+                try:
+                    self.__proxies[id_[0]] = p
+                    self.__proxy_ids[id(p)] = id_[0]
+                finally:
+                    self.__marshal_lock.release()
             else:
                 # Known object: id
-                p = self.__proxies[id_]
+                self.__marshal_lock.acquire()
+                try:
+                    p = self.__proxies[id_]
+                finally:
+                    self.__marshal_lock.release()
             return p
         elif payload.startswith("o"):
             # The object originated here.
             id_ = marshal.loads(buffer(payload, 1))
-            return self.__proxied_objects[id_]
+            self.__marshal_lock.acquire()
+            try:
+                return self.__proxied_objects[id_]
+            finally:
+                self.__marshal_lock.release()
         else:
             raise ValueError, "Invalid payload prefix"
+
 
     def __send_message(self, message_type, args):
         pushy.util.logger.debug("Sending %r", message_type)
@@ -346,6 +441,7 @@ class BaseConnection(threading.Thread):
             self.__ostream_lock.release()
         pushy.util.logger.debug("Sent %r [%d bytes]", message_type, len(bytes))
 
+
     def __recv(self):
         pushy.util.logger.debug("Waiting for message")
         self.__istream_lock.acquire()
@@ -357,7 +453,10 @@ class BaseConnection(threading.Thread):
             pushy.util.logger.debug("Receive ended")
             self.__istream_lock.release()
 
+
     def __handle(self, m):
+        pushy.util.logger.debug("Handing message: %r", m)
+
         # Track the number of requests being processed in this thread. May be
         # greater than one, if there is to-and-fro. We need to track this so
         # we know when to send a 'syncrequest' message.
@@ -387,6 +486,15 @@ class BaseConnection(threading.Thread):
             tb = "".join(traceback.format_tb(tb))
             self.__send_message(MessageType.exception, (type, value, tb))
 
+            # Allow the message receiving thread to proceed.
+            self.__processing_condition.acquire()
+            try:
+                self.__processing -= 1
+                if self.__processing == 0:
+                    self.__processing_condition.notify()
+            finally:
+                self.__processing_condition.release()
+
             # Assigning traceback to a local variable within an exception
             # handler creates a cyclic reference. Manual deletion required.
             #
@@ -396,8 +504,10 @@ class BaseConnection(threading.Thread):
             if is_request:
                 self.__thread_local.request_count -= 1
 
+
     def __handle_response(self, message_type, result):
         return result
+
 
     def __handle_exception(self, message_type, e):
         # If the peer called us back when we called them, then we need
@@ -406,6 +516,7 @@ class BaseConnection(threading.Thread):
             self.__send_message(MessageType.exception, self.__marshal(e))
         else:
             raise e[1]
+
 
     def __handle_syncrequest(self, message_type, args):
         "Synchronous requests (i.e. requests in response to another request.)"

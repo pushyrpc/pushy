@@ -69,10 +69,10 @@ class Message:
     def unpack(file):
         data = ""
         while len(data) < Message.PACKING_SIZE:
-            pushy.util.logger.debug(
-                "Reading %d bytes", Message.PACKING_SIZE-len(data))
-            partial = file.read(Message.PACKING_SIZE - len(data))
-            pushy.util.logger.debug("Received %d bytes", len(partial))
+            try:
+                partial = file.read(Message.PACKING_SIZE - len(data))
+            except Exception, e:
+                raise IOError, e
             if partial == "":
                 raise IOError
             data += partial

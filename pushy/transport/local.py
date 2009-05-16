@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -40,4 +40,5 @@ class Popen(pushy.transport.BaseTransport):
 
     def close(self):
         self.stdin.close()
+        self.__proc.wait()
 

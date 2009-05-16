@@ -321,6 +321,11 @@ class PushyClient:
             import pushy.protocol
             remote = pushy.protocol.Connection(self.server.stdout,
                                                self.server.stdin)
+
+            # Start a thread for processing asynchronous requests from the peer
+            self.serve_thread = threading.Thread(target=remote.serve_forever)
+            self.serve_thread.start()
+
             modules_ = AutoImporter(remote)
             rsys = modules_.sys
             rsys.stdout = sys.stdout
@@ -349,11 +354,12 @@ class PushyClient:
             raise
 
     def __del__(self):
-        print "~Client"
         if hasattr(self, "server"):
             del self.server
             if hasattr(self, "remote"):
                 self.remote.close()
+                if hasattr(self, "serve_thread"):
+                    self.serve_thread.join()
 
     def __getattr__(self, name):
         if name == "server":
