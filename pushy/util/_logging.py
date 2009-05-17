@@ -21,6 +21,19 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging
+import logging, os, sys
 logger = logging.getLogger("pushy")
+logger.disabled = True
+if not logger.disabled:
+    logger.addHandler(logging.FileHandler("pushy.%d.log" % os.getpid()))
+    logger.setLevel(logging.DEBUG)
+    logger.debug("sys.argv: %r", sys.argv)
+
+#import socket
+#import ctypes
+
+#buf = ctypes.create_string_buffer(1024)
+#ctypes.windll.wsock32.gethostname(buf, 1023)
+#buf[1023] = chr(0)
+#logger.debug("hostname: %s", buf.value)
 

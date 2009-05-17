@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -21,7 +21,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import struct
+import os, struct
+import pushy.util
 
 class MessageType:
     "A class for describing the type of a message."
@@ -35,6 +36,8 @@ class MessageType:
         return self.code
     def __str__(self):
         return self.name
+    def __hash__(self):
+        return self.code
     def __eq__(self, other):
         if type(other) is int: return other == self.code
         elif type(other) is str: return other == self.name
@@ -66,7 +69,10 @@ class Message:
     def unpack(file):
         data = ""
         while len(data) < Message.PACKING_SIZE:
-            partial = file.read(Message.PACKING_SIZE - len(data))
+            try:
+                partial = file.read(Message.PACKING_SIZE - len(data))
+            except Exception, e:
+                raise IOError, e
             if partial == "":
                 raise IOError
             data += partial
@@ -88,6 +94,7 @@ class Message:
 message_names = (
   "evaluate",
   "response",
+  "syncrequest",
   "exception",
   "getattr",
   "setattr",

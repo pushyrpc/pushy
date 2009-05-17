@@ -36,6 +36,7 @@ class Popen(pushy.transport.BaseTransport):
         self.stdin  = self.__socket.makefile("wb")
         self.stdout = self.__socket.makefile("rb")
         self.stderr = StringIO.StringIO()
+        self.stdin._close = True
 
     def close(self):
         self.stdin.close()

@@ -82,18 +82,17 @@ def Proxy(id_, opmask, proxy_type, args, conn):
     # Determine the class to use for the proxy type.
     if proxy_type == ProxyType.stopiteration:
         class StopIterationProxy(StopIteration, object):
-            def __getattribute__(self, name): return conn.getattr(id_, name)
+            def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = StopIterationProxy
     elif proxy_type == ProxyType.attributeerror:
         class AttributeErrorProxy(AttributeError, object):
-            def __getattribute__(self, name): return conn.getattr(id_, name)
+            def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = AttributeErrorProxy
     elif proxy_type == ProxyType.exception:
         class ExceptionProxy(Exception, object):
-            def __getattribute__(self, name): return conn.getattr(id_, name)
+            def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
-        pushy.util.logger.info("Got a dictionary type (%r)", args)
         class DictionaryProxy(dict):
             def __init__(self):
                 if args is not None:
@@ -101,78 +100,76 @@ def Proxy(id_, opmask, proxy_type, args, conn):
                 else:
                     dict.__init__(self)
             def __getattribute__(self, name):
-                pushy.util.logger.info("DictionaryProxy.getattr(%s)", name)
-                return conn.getattr(id_, name)
+                return conn.getattr(self, name)
         ProxyClass = DictionaryProxy
     elif proxy_type == ProxyType.list:
-        pushy.util.logger.info("Got a list type (%r)", args)
         class ListProxy(list):
             def __init__(self):
                 list.__init__(self, args)
             def __getattribute__(self, name):
-                pushy.util.logger.info("ListProxy.getattr(%s)", name)
-                return conn.getattr(id_, name)
+                return conn.getattr(self, name)
         ProxyClass = ListProxy
     elif proxy_type == ProxyType.set:
-        pushy.util.logger.info("Got a set type (%r)", args)
         class SetProxy(set):
             def __init__(self):
                 set.__init__(self, args)
             def __getattribute__(self, name):
-                pushy.util.logger.info("SetProxy.getattr(%s)", name)
-                return conn.getattr(id_, name)
+                return conn.getattr(self, name)
         ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
-        pushy.util.logger.info("Got a module type")
         class ModuleProxy(types.ModuleType):
             def __init__(self): types.ModuleType.__init__(self, "")
             def __getattribute__(self, name):
-                pushy.util.logger.info("ModuleProxy.getattr(%s)", name)
-                return conn.getattr(id_, name)
+                return conn.getattr(self, name)
         ProxyClass = ModuleProxy
     else:
         class ObjectProxy(object):
             def __getattribute__(self, name):
-                pushy.util.logger.info("getattr(%s)", name)
-                return conn.getattr(id_, name)
+                return conn.getattr(self, name)
         ProxyClass = ObjectProxy
 
     # Callable for delegating to an operator on the remote object.
     class Operator:
         def __init__(self, type_):
             self.type_ = type_
+            self.object = None
         def __call__(self, *args, **kwargs):
-            return conn.operator(self.type_, id_, args, kwargs)
+            return conn.operator(self.type_, self.object, args, kwargs)
 
     # Create proxy operators.
+    operators = []
     op_index = -1
     while opmask:
         if opmask & 1:
             type_ = message_types[op_index]
             method = Operator(type_)
             setattr(ProxyClass, type_.name[2:], method)
+            operators.append(method)
         opmask >>= 1
         op_index -= 1
 
     # Add __str__ and __repr__ methods
     def method(self):
-        return conn.getstr(id_)
+        return conn.getstr(self)
     setattr(ProxyClass, "__str__", method)
     def method(self):
-        return conn.getrepr(id_)
+        return conn.getrepr(self)
     setattr(ProxyClass, "__repr__", method)
 
     # Make sure we support the iteration protocol properly
     #if hasattr(ProxyClass, "__iter__"):
     def method(self):
-        return conn.getattr(id_, "next")()
+        return conn.getattr(self, "next")()
     setattr(ProxyClass, "next", method)
 
     def method(self, name, value):
-        return conn.setattr(id_, name, value)
+        return conn.setattr(self, name, value)
     setattr(ProxyClass, "__setattr__", method)
 
-    return ProxyClass()
+    proxy = ProxyClass()
+    for operator in operators:
+        operator.object = proxy
+    return proxy
 
 ###############################################################################
 # Create enumeration of proxy types

@@ -31,6 +31,8 @@ import pushy, unittest
 class TestList(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_append(self):
         "Ensure we can append items to a remote list."

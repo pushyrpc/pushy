@@ -31,6 +31,8 @@ import pushy, unittest
 class TestEval(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_eval_expr(self):
         self.assertEquals(self.conn.eval("1+2"), 3)

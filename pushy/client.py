@@ -186,8 +186,10 @@ def pushy_server():
     import pickle, sys
 
     # Back up old stdin/stdout.
-    old_stdout = os.fdopen(os.dup(sys.stdout.fileno()), "wb", 0)
+    stdout_fileno = sys.stdout.fileno()
+    old_stdout = os.fdopen(os.dup(stdout_fileno), "wb", 0)
     try_set_binary(old_stdout.fileno())
+    sys.stdout.close()
 
     # Reconstitute the package hierarchy delivered from the client
     (packages, modules) = pickle.load(sys.stdin)
@@ -202,7 +204,7 @@ def pushy_server():
     import pushy.util
     (so_r, so_w) = os.pipe()
     (se_r, se_w) = os.pipe()
-    os.dup2(so_w, sys.__stdout__.fileno())
+    os.dup2(so_w, stdout_fileno)
     os.dup2(se_w, sys.__stderr__.fileno())
     for f in (so_r, so_w, se_r, se_w):
         try_set_binary(f)
@@ -212,9 +214,14 @@ def pushy_server():
     pushy.util.StderrRedirector(se_r).start()
 
     # Start the request servicing loop
-    import pushy.protocol
-    c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
-    c.serve_forever()
+    try:
+        import pushy.protocol
+        import pushy.util
+        c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
+        c.serve_forever()
+    finally:
+        old_stdout.close()
+        sys.stdin.close()
 
 ###############################################################################
 
@@ -284,6 +291,8 @@ def get_transport(target):
 
 ###############################################################################
 
+logid = 0
+
 class PushyClient:
     "Client-side Pushy connection initiator."
 
@@ -312,6 +321,11 @@ class PushyClient:
             import pushy.protocol
             remote = pushy.protocol.Connection(self.server.stdout,
                                                self.server.stdin)
+
+            # Start a thread for processing asynchronous requests from the peer
+            self.serve_thread = threading.Thread(target=remote.serve_forever)
+            self.serve_thread.start()
+
             modules_ = AutoImporter(remote)
             rsys = modules_.sys
             rsys.stdout = sys.stdout
@@ -342,14 +356,18 @@ class PushyClient:
     def __del__(self):
         if hasattr(self, "server"):
             del self.server
+            if hasattr(self, "remote"):
+                self.remote.close()
+                if hasattr(self, "serve_thread"):
+                    self.serve_thread.join()
 
     def __getattr__(self, name):
         if name == "server":
             if hasattr(self, "server"):
-                return getattr(self, "server")
+                return self.server
             else:
                 raise AttributeError
-        return getattr(getattr(self, "remote"), name)
+        return getattr(self.remote, name)
 
     def load_packages(self):
         if self.pushy_packages is None:
@@ -361,6 +379,29 @@ class PushyClient:
             finally:
                 self.packages_lock.release()
         return self.pushy_packages
+
+    def enable_logging(self, client=True, server=False):
+        global logid
+        logid += 1
+
+        if client:
+            import pushy.util, logging
+            filename = "pushy-client.%d.log" % logid
+            if os.path.exists(filename):
+                os.remove(filename)
+            pushy.util.logger.addHandler(logging.FileHandler(filename))
+            pushy.util.logger.setLevel(logging.DEBUG)
+            pushy.util.logger.disabled = False
+
+        if server:
+            filename = "pushy-server.%d.log" % logid
+            ros = self.modules.os
+            if ros.path.exists(filename):
+                ros.remove(filename)
+            self.modules.pushy.util.logger.addHandler(
+                self.modules.logging.FileHandler(filename))
+            self.modules.pushy.util.logger.setLevel(self.modules.logging.DEBUG)
+            pushy.util.logger.disabled = True
 
 
 def connect(target, **kwargs):

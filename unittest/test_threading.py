@@ -31,6 +31,8 @@ import pushy, threading, time, unittest
 class TestThreading(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_blocking(self):
         time_sleep = self.conn.modules.time.sleep

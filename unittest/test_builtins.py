@@ -31,6 +31,8 @@ import pushy, unittest
 class TestBuiltins(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
+    def tearDown(self):
+        self.conn.close()
 
     def test_str(self):
         "Ensure we can call __str__ on a remote object."

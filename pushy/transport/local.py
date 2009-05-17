@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -21,13 +21,15 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, subprocess
+import os, subprocess, sys
 
 import pushy.transport
 
 class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address)
+
+        command[0] = sys.executable
         self.__proc = subprocess.Popen(command, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
@@ -38,4 +40,5 @@ class Popen(pushy.transport.BaseTransport):
 
     def close(self):
         self.stdin.close()
+        self.__proc.wait()
 
