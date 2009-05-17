@@ -22,7 +22,6 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import pushy
-print pushy
 
 def parse_args():
     from optparse import OptionParser
