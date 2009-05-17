@@ -91,6 +91,16 @@ class ParamikoPopen(pushy.transport.BaseTransport):
         self.stderr = stderr
         self.fs = self.__client.open_sftp()
 
+    def __del__(self):
+        self.close()
+
+    def close(self):
+        self.stdin.close()
+        self.stdout.close()
+        self.stderr.close()
+        self.__client.close()
+
+
 ###############################################################################
 # Native SSH. This is used when no password is specified.
 
@@ -145,6 +155,9 @@ if native_ssh is not None:
             self.stderr = self.__proc.stderr
 
         def __del__(self):
+            self.close()
+
+        def close(self):
             self.stdin.close()
             self.stdout.close()
             self.stderr.close()
@@ -153,9 +166,6 @@ if native_ssh is not None:
                 os.kill(self.__proc.pid, signal.SIGTERM)
             except: pass
             self.__proc.wait()
-
-        def close(self):
-            self.stdin.close()
 
 ###############################################################################
 # Define Popen.

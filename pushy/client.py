@@ -26,8 +26,14 @@ This module provides the code to used to start a remote Pushy server running,
 and initiate a connection.
 """
 
-import __builtin__, hashlib, imp, marshal, os, sys, marshal, os, struct
+import __builtin__, imp, marshal, os, sys, marshal, os, struct
 import threading, cPickle as pickle
+import pushy.util
+
+try:
+    import hashlib
+except ImportError:
+    import md5 as hashlib
 
 __all__ = ["PushyPackageLoader", "InMemoryLoader", "InMemoryLoader",
            "AutoImporter", "PushyClient", "connect"]
@@ -254,7 +260,11 @@ md5ServerSource = hashlib.md5(serverSource).digest()
 # predetermined number of bytes, and execute them as a program. So once we
 # start the process up, we immediately write the "real" server source to it.
 realServerLoaderSource = """
-import __builtin__, os, marshal, hashlib, sys
+import __builtin__, os, marshal, sys
+try:
+    import hashlib
+except ImportError:
+    import md5 as hashlib
 serverSource = sys.stdin.read(%d)
 assert hashlib.md5(serverSource).digest() == %r
 __builtin__.pushy_source = serverSource
@@ -351,23 +361,25 @@ class PushyClient:
             for line in errorlines:
                 print >> sys.stderr, "[remote]", line.rstrip()
             print >> sys.stderr, ""
+
+            self.server = None
+            self.remote = None
+            self.serve_thread = None
             raise
 
     def __del__(self):
-        if hasattr(self, "server"):
-            del self.server
-            if hasattr(self, "remote"):
-                self.remote.close()
-                if hasattr(self, "serve_thread"):
-                    self.serve_thread.join()
+        self.close()
 
-    def __getattr__(self, name):
-        if name == "server":
-            if hasattr(self, "server"):
-                return self.server
-            else:
-                raise AttributeError
-        return getattr(self.remote, name)
+    def eval(self, code):
+        return self.remote.eval(code)
+
+    def close(self):
+        if self.server is not None:
+            self.server.close()
+        if self.remote is not None:
+            self.remote.close()
+        if self.serve_thread is not None:
+            self.serve_thread.join()
 
     def load_packages(self):
         if self.pushy_packages is None:

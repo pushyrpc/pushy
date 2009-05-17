@@ -21,14 +21,17 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import common
+import common, sys
 
 if __name__ == "__main__":
     connection = common.get_connection()
-    print "Connected to:", connection.server.address
+    try:
+        print "Connected to:", connection.server.address
 
-    # Accessing connection.modules.platform is equivalent to importing the
-    # 'platform' module from the remote interpreter.
-    print "The remote host's platform is:", \
-          connection.modules.platform.platform()
+        # Accessing connection.modules.platform is equivalent to importing the
+        # 'platform' module from the remote interpreter.
+        print "The remote host's platform is:", \
+              connection.modules.platform.platform()
+    finally:
+        del connection
 

@@ -22,8 +22,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import pushy
-
-connection = None
+print pushy
 
 def parse_args():
     from optparse import OptionParser
@@ -36,11 +35,8 @@ def parse_args():
     return (options, args)
 
 def get_connection():
-    global connection
-    if connection is None:
-        (options, args) = parse_args()
-        connection = pushy.connect(args[0],
-                                   username=options.username,
-                                   password=options.password)
-    return connection
+    (options, args) = parse_args()
+    username = options.username
+    password = options.password
+    return pushy.connect(args[0], username=username, password=password)
 

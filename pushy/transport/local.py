@@ -38,6 +38,9 @@ class Popen(pushy.transport.BaseTransport):
         self.stderr = self.__proc.stderr
         self.stdin  = self.__proc.stdin
 
+    def __del__(self):
+        self.close()
+
     def close(self):
         self.stdin.close()
         self.__proc.wait()

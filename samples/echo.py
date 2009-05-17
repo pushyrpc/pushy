@@ -21,11 +21,25 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, os, sys
-logger = logging.getLogger("pushy")
-logger.disabled = True
-if not logger.disabled:
-    logger.addHandler(logging.FileHandler("pushy.%d.log" % os.getpid()))
-    logger.setLevel(logging.DEBUG)
-    logger.debug("sys.argv: %r", sys.argv)
+import common, sys, time
+
+if __name__ == "__main__":
+    connection = common.get_connection()
+    try:
+        print "Connected to:", connection.server.address
+
+        # Write data to the stdout file descriptor in the remote interpreter.
+        # This demonstrates the use of the background I/O redirector thread,
+        # asynchronous requests.
+        for line in sys.stdin:
+            connection.modules.os.write(
+                connection.modules.sys.stdout.fileno(), line)
+
+        # Give the output a chance to come through. It would be nice to be able
+        # to call "flush" on sys.stdout and have it block until the data is
+        # written to the client interpreter's file.
+        time.sleep(1)
+        sys.stdout.flush()
+    finally:
+        del connection
 

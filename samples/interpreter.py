@@ -60,13 +60,11 @@ if __name__ == "__main__":
     """
 
     connection = common.get_connection()
-    print "Connected to:", connection.server.address
-    print "Client PID is:", os.getpid()
-    print "Peer PID is:", connection.modules.os.getpid()
-
-    # XXX Note that executing commands in the remote interpreter that result
-    #     in it writing to stdout/stderr may hang the process. This is due to
-    #     an outstanding issue with Pushy, where the stdout/err redirectors
-    #     actively attempt to write back to the client.
-    RemoteConsole(connection).interact()
+    try:
+        print "Connected to:", connection.server.address
+        print "Client PID is:", os.getpid()
+        print "Peer PID is:", connection.modules.os.getpid()
+        RemoteConsole(connection).interact()
+    finally:
+        del connection
 
