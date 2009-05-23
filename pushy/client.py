@@ -28,8 +28,14 @@ and initiate a connection.
 
 import __builtin__, imp, marshal, os, sys, marshal, os, struct
 import threading, cPickle as pickle
-import pushy.util
 
+# Import zipimport, for use in PushyPackageLoader.
+try:
+    import zipimport
+except ImportError:
+    zipimport = None
+
+# Import hashlib if it exists, with md5 as a backup.
 try:
     import hashlib
 except ImportError:
@@ -64,11 +70,16 @@ class PushyPackageLoader:
         if os.sep != "/":
             path = path.replace(os.sep, "/")
     
-        dotzip = path.find(".zip")
-        if dotzip != -1:
-            zippath = path[:dotzip+4]
-            subdir = path[dotzip+5:] # Skip '/'
-    
+        # Check to see if the package was loaded from a zip file.
+        is_zip = False
+        if zipimport is not None:
+            if hasattr(package, "__loader__"):
+                is_zip = isinstance(package.__loader__, zipimport.zipimporter)
+
+        if is_zip:
+            zippath = package.__loader__.archive
+            subdir = path[len(zippath)+1:] # Skip '/'
+
             import zipfile, pushy.util
             zf = zipfile.ZipFile(zippath)
             walk_fn = lambda: pushy.util.zipwalk(zf, subdir)
@@ -82,7 +93,7 @@ class PushyPackageLoader:
         for root, dirs, files in walk_fn():
             if os.sep != "/":
                 root = root.replace(os.sep, "/")
-            if dotzip == -1:
+            if not is_zip:
                 modulename = root[prefix_len:].replace("/", ".")
             else:
                 modulename = root.replace("/", ".")
@@ -245,13 +256,17 @@ class AutoImporter:
 # Read the source for the server into a string. If we're the server, we'll
 # have defined __builtin__.pushy_source (by the "realServerLoaderSource").
 if not hasattr(__builtin__, "pushy_source"):
-    if __file__.endswith(".pyc"):
-        f = open(__file__, "rb")
-        f.seek(struct.calcsize("<4bL"))
-        serverSource = f.read()
-    else:
-        code_ = compile(open(__file__).read(), __file__, "exec")
+    if "__loader__" in locals():
+        code_ = __loader__.get_code(__name__)
         serverSource = marshal.dumps(code_)
+    else:
+        if __file__.endswith(".pyc"):
+            f = open(__file__, "rb")
+            f.seek(struct.calcsize("<4bL"))
+            serverSource = f.read()
+        else:
+            code_ = compile(open(__file__).read(), __file__, "exec")
+            serverSource = marshal.dumps(code_)
 else:
     serverSource = __builtin__.pushy_source
 md5ServerSource = hashlib.md5(serverSource).digest()
