@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+
+<project>
+    <target name="clean">
+        <delete dir="build"/>
+    </target>
+
+    <target name="compile">
+        <mkdir dir="build/classes"/>
+        <unjar dest="build/classes">
+            <fileset dir="lib">
+                <include name="*.jar"/>
+            </fileset>
+        </unjar>    
+        <javac srcdir="src" destdir="build/classes" source="1.4" target="1.4">
+            <compilerarg value="-Xlint"/>
+        </javac>
+    </target>
+
+    <target name="jar" depends="compile">
+        <copy todir="build/classes/pushy">
+            <fileset dir="../pushy">
+                <include name="**/*.py"/>
+            </fileset>
+        </copy>
+        <jar destfile="build/pushy.jar">
+            <fileset dir="build/classes"/>
+            <fileset dir="src/python"/>
+        </jar>
+    </target>
+
+    <target name="compile_tests" depends="jar">
+        <mkdir dir="build/unittest-classes"/>
+        <javac srcdir="unittest" destdir="build/unittest-classes"
+               source="1.4" target="1.4">
+            <compilerarg value="-Xlint"/>
+            <classpath>
+                <pathelement path="${classpath}"/>
+                <pathelement location="build/pushy.jar"/>
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="test" depends="jar,compile_tests">
+        <junit fork="yes">
+            <classpath>
+                <pathelement path="${classpath}"/>
+                <pathelement location="build/pushy.jar"/>
+                <pathelement location="build/unittest-classes"/>
+            </classpath>
+            <formatter type="brief" usefile="false"/>
+            <batchtest>
+                <fileset dir="unittest">
+                    <include name="**/*Test.java"/>
+                </fileset>
+            </batchtest>
+        </junit>
+    </target>
+</project>
+
