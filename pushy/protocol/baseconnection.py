@@ -100,10 +100,16 @@ class BaseConnection:
         self.__requests_condition = threading.Condition(threading.Lock())
 
         # Attributes required to track number of threads processing requests.
-        # The message receiving thread may only attempt to receive a message
-        # when there are 0 threads processing events and not waiting for a
-        # response from a syncrequest.
-        self.__processing = 0
+        # The following has to be true for the message receiving thread to be
+        # allowed to attempt to receive a message:
+        #     - There are no threads currently processing a request, and
+        #       there are no requests pending.
+        #  OR
+        #     - There are threads currently processing a request, but they
+        #       are all waiting on responses to syncrequests.
+        self.__pending    = 0 # How many requests are waiting to be processed.
+        self.__processing = 0 # How many requests are being processed.
+        self.__waiting    = 0 # How many syncrequest responses are pending.
         self.__processing_condition = threading.Condition(threading.Lock())
 
         # Uncomment the following for debugging.
@@ -166,12 +172,23 @@ class BaseConnection:
                 pushy.util.logger.debug(
                     "Waiting until we are allowed to read a message")
 
-                while self.__open and self.__processing > 0:
+                while self.__open and \
+                      ((self.__processing == 0 and self.__pending > 0) or \
+                       (self.__processing > 0 and \
+                        (self.__processing > self.__waiting))):
                     self.__processing_condition.wait()
                 if not self.__open:
                     return
 
-                m = self.__recv()
+                # Release the processing condition, and wait for a message.
+                self.__processing_condition.release()
+                try:
+                    m = self.__recv()
+                finally:
+                    self.__processing_condition.acquire()
+
+                # Handle the message: either enqueue a request, or send it to
+                # the relevant response handler.
                 if m.type in response_types:
                     self.__response_handler_lock.acquire()
                     try:
@@ -181,7 +198,7 @@ class BaseConnection:
                         self.__response_handler_lock.release()
                     response_handler.set(m)
                     if response_handler.syncrequest:
-                        self.__processing += 1
+                        self.__waiting -= 1
                 elif m.type is MessageType.syncrequest:
                     self.__response_handler_lock.acquire()
                     try:
@@ -191,7 +208,7 @@ class BaseConnection:
                     response_handler.set(m)
                     self.__processing += 1
                 else:
-                    self.__processing += 1
+                    self.__pending += 1
                     self.__requests_condition.acquire()
                     try:
                         self.__requests.append(m)
@@ -237,10 +254,11 @@ class BaseConnection:
             while self.__open and len(self.__requests) == 0:
                 self.__requests_condition.wait(1)
             if self.__open:
+                self.__pending -= 1
+                self.__processing += 1
                 request = self.__requests[0]
                 del self.__requests[0]
         except:
-            pushy.util.logger.debug("error occurred")
             raise
         finally:
             self.__requests_condition.release()
@@ -271,8 +289,8 @@ class BaseConnection:
                 handler.syncrequest = True
                 self.__processing_condition.acquire()
                 try:
-                    self.__processing -= 1
-                    if self.__processing == 0:
+                    self.__waiting += 1
+                    if self.__processing == self.__waiting:
                         self.__processing_condition.notify()
                 finally:
                     self.__processing_condition.release()

@@ -21,6 +21,10 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
+import os, sys
+thisdir = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(thisdir, ".."))
+
 import pushy
 
 def parse_args():
