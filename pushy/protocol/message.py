@@ -74,7 +74,7 @@ class Message:
             except Exception, e:
                 raise IOError, e
             if partial == "":
-                raise IOError
+                raise IOError, "End of file"
             data += partial
         (type, length) = struct.unpack(Message.PACKING_FORMAT, data)
         type = message_types[type]
