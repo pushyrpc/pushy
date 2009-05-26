@@ -225,10 +225,14 @@ def pushy_server():
     os.dup2(se_w, sys.__stderr__.fileno())
     for f in (so_r, so_w, se_r, se_w):
         try_set_binary(f)
+    os.close(so_w)
+    os.close(se_w)
     sys.stdout = open(os.devnull, "w")
     sys.stderr = sys.stdout
-    pushy.util.StdoutRedirector(so_r).start()
-    pushy.util.StderrRedirector(se_r).start()
+    so_redir = pushy.util.StdoutRedirector(so_r)
+    se_redir = pushy.util.StderrRedirector(se_r)
+    so_redir.start()
+    se_redir.start()
 
     # Start the request servicing loop
     try:
@@ -236,6 +240,11 @@ def pushy_server():
         import pushy.util
         c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
         c.serve_forever()
+        old_stdout.close()
+        os.close(stdout_fileno)
+        os.close(sys.__stderr__.fileno())
+        so_redir.join()
+        se_redir.join()
     finally:
         old_stdout.close()
         sys.stdin.close()
@@ -310,7 +319,7 @@ def get_transport(target):
     transport = pushy.transports[transport_name]
     if transport is None:
         transport = __import__("pushy.transport.%s" % transport_name,
-                               fromlist=["pushy.transport"])
+                               globals(), locals(), ["pushy.transport"])
         pushy.transports[transport_name] = transport
     return (transport, target[colon+1:])
 

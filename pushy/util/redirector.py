@@ -39,14 +39,16 @@ class OutputRedirector(threading.Thread):
         raise "Not implemented"
 
     def run(self):
-        data = os.read(self.__fileno, self.__bufsize)
-        while len(data) > 0:
+        try:
             try:
-                self.getfile().write(data)
                 data = os.read(self.__fileno, self.__bufsize)
-            except Exception, e:
-                break
-        self.getfile().flush()
+                while len(data) > 0:
+                    self.getfile().write(data)
+                    data = os.read(self.__fileno, self.__bufsize)
+            finally:
+                self.getfile().flush()
+        except:
+            pass
 
 class StdoutRedirector(OutputRedirector):
     def getfile(self):

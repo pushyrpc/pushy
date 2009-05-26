@@ -484,38 +484,39 @@ class BaseConnection:
                 self.__thread_local.request_count = 1
 
         try:
-            args = self.__unmarshal(m.payload)
-            return self.message_handlers[m.type](m.type, args)
-        except SystemExit, e:
-            self.send_response(e.code)
-            raise e
-        except:
-            if m.type is MessageType.exception:
-                raise
-
-            import sys, traceback
-            (type, value, tb) = sys.exc_info()
-            pushy.util.logger.debug(
-                "Raising an exception", exc_info=(type, value, tb))
-
-            # Send the above three objects to the caller
-            tb = "".join(traceback.format_tb(tb))
-            self.__send_message(MessageType.exception, (type, value, tb))
-
-            # Allow the message receiving thread to proceed.
-            self.__processing_condition.acquire()
             try:
-                self.__processing -= 1
-                if self.__processing == 0:
-                    self.__processing_condition.notify()
-            finally:
-                self.__processing_condition.release()
+                args = self.__unmarshal(m.payload)
+                return self.message_handlers[m.type](m.type, args)
+            except SystemExit, e:
+                self.send_response(e.code)
+                raise e
+            except:
+                if m.type is MessageType.exception:
+                    raise
 
-            # Assigning traceback to a local variable within an exception
-            # handler creates a cyclic reference. Manual deletion required.
-            #
-            # http://docs.python.org/lib/module-sys.html#l2h-5142
-            del type, value, tb
+                import sys, traceback
+                (type, value, tb) = sys.exc_info()
+                pushy.util.logger.debug(
+                    "Raising an exception", exc_info=(type, value, tb))
+
+                # Send the above three objects to the caller
+                tb = "".join(traceback.format_tb(tb))
+                self.__send_message(MessageType.exception, (type, value, tb))
+
+                # Allow the message receiving thread to proceed.
+                self.__processing_condition.acquire()
+                try:
+                    self.__processing -= 1
+                    if self.__processing == 0:
+                        self.__processing_condition.notify()
+                finally:
+                    self.__processing_condition.release()
+
+                # Assigning traceback to a local variable within an exception
+                # handler creates a cyclic reference. Manual deletion required.
+                #
+                # http://docs.python.org/lib/module-sys.html#l2h-5142
+                del type, value, tb
         finally:
             if is_request:
                 self.__thread_local.request_count -= 1
