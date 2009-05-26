@@ -80,8 +80,7 @@ class BaseConnection:
         self.__initiator    = initiator
         self.__istream_lock = threading.Lock()
         self.__ostream_lock = threading.Lock()
-        self.__request_lock = threading.Lock()
-        self.__marshal_lock = threading.Lock()
+        self.__request_lock = threading.RLock()
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
@@ -358,42 +357,30 @@ class BaseConnection:
             except ValueError: pass
 
         i = id(obj)
-        self.__marshal_lock.acquire()
-        try:
-            if i in self.__proxied_objects:
-                return "p" + marshal.dumps(i)
-            elif i in self.__proxy_ids:
-                # Object originates at the peer.
-                return "o" + marshal.dumps(self.__proxy_ids[i])
+        if i in self.__proxied_objects:
+            return "p" + marshal.dumps(i)
+        elif i in self.__proxy_ids:
+            # Object originates at the peer.
+            return "o" + marshal.dumps(self.__proxy_ids[i])
+        else:
+            # Create new entry in proxy objects map:
+            #    id -> (obj, refcount, opmask[, args])
+            #
+            # opmask is a bitmask defining whether or not the object
+            # defines various methods (__add__, __iter__, etc.)
+            opmask = get_opmask(obj)
+            proxy_result = ProxyType.get(obj)
+
+            if type(proxy_result) is tuple:
+                obj_type, args = proxy_result
+                dumps_args = \
+                    (i, opmask, int(obj_type), self.__marshal(args))
             else:
-                # Temporarily release the lock.
-                self.__marshal_lock.release()
+                obj_type = proxy_result
+                dumps_args = (i, opmask, int(obj_type))
 
-                # Create new entry in proxy objects map:
-                #    id -> (obj, refcount, opmask[, args])
-                #
-                # opmask is a bitmask defining whether or not the object
-                # defines various methods (__add__, __iter__, etc.)
-                try:
-                    opmask = get_opmask(obj)
-                    proxy_result = ProxyType.get(obj)
-    
-                    if type(proxy_result) is tuple:
-                        obj_type, args = proxy_result
-                        dumps_args = \
-                            (i, opmask, int(obj_type), self.__marshal(args))
-                    else:
-                        obj_type = proxy_result
-                        dumps_args = (i, opmask, int(obj_type))
-                finally:
-                    # Reacquire lock.
-                    self.__marshal_lock.acquire()
-
-                # Store the result.
-                self.__proxied_objects[i] = obj
-                return "p" + marshal.dumps(dumps_args, 0)
-        finally:
-            self.__marshal_lock.release()
+            self.__proxied_objects[i] = obj
+            return "p" + marshal.dumps(dumps_args, 0)
 
 
     def __unmarshal(self, payload):
@@ -418,31 +405,25 @@ class BaseConnection:
                 args = None
                 if len(id_) >= 4:
                     args = self.__unmarshal(id_[3])
-                p = Proxy(id_[0], id_[1], id_[2], args, self)
-                self.__marshal_lock.acquire()
-                try:
-                    self.__proxies[id_[0]] = p
-                    self.__proxy_ids[id(p)] = id_[0]
-                finally:
-                    self.__marshal_lock.release()
+                p = Proxy(id_[0], id_[1], id_[2], args, self,
+                          self.__register_proxy)
+                return p
             else:
                 # Known object: id
-                self.__marshal_lock.acquire()
-                try:
-                    p = self.__proxies[id_]
-                finally:
-                    self.__marshal_lock.release()
-            return p
+                return self.__proxies[id_]
         elif payload.startswith("o"):
             # The object originated here.
             id_ = marshal.loads(buffer(payload, 1))
-            self.__marshal_lock.acquire()
-            try:
-                return self.__proxied_objects[id_]
-            finally:
-                self.__marshal_lock.release()
+            return self.__proxied_objects[id_]
         else:
             raise ValueError, "Invalid payload prefix"
+
+
+    def __register_proxy(self, proxy, remote_id):
+        pushy.util.logger.debug(
+            "Registering a proxy: %r -> %r", id(proxy), remote_id)
+        self.__proxies[remote_id] = proxy
+        self.__proxy_ids[id(proxy)] = remote_id
 
 
     def __send_message(self, message_type, args):

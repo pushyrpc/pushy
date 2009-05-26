@@ -73,7 +73,7 @@ def get_opmask(obj):
     return (mask >> 1)
 
 
-def Proxy(id_, opmask, proxy_type, args, conn):
+def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     """
     Create a proxy object, which delegates attribute access and method
     invocation to an object in a remote Python interpreter.
@@ -82,19 +82,32 @@ def Proxy(id_, opmask, proxy_type, args, conn):
     # Determine the class to use for the proxy type.
     if proxy_type == ProxyType.stopiteration:
         class StopIterationProxy(StopIteration, object):
+            def __init__(self):
+                on_proxy_init(self, id_)
+                StopIteration.__init__(self)
+                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = StopIterationProxy
     elif proxy_type == ProxyType.attributeerror:
         class AttributeErrorProxy(AttributeError, object):
+            def __init__(self):
+                on_proxy_init(self, id_)
+                AttributeErrorProxy.__init__(self)
+                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = AttributeErrorProxy
     elif proxy_type == ProxyType.exception:
         class ExceptionProxy(Exception, object):
+            def __init__(self):
+                on_proxy_init(self, id_)
+                Exception.__init__(self)
+                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
         class DictionaryProxy(dict):
             def __init__(self):
+                on_proxy_init(self, id_)
                 if args is not None:
                     dict.__init__(self, args)
                 else:
@@ -105,6 +118,7 @@ def Proxy(id_, opmask, proxy_type, args, conn):
     elif proxy_type == ProxyType.list:
         class ListProxy(list):
             def __init__(self):
+                on_proxy_init(self, id_)
                 list.__init__(self, args)
             def __getattribute__(self, name):
                 return conn.getattr(self, name)
@@ -112,18 +126,24 @@ def Proxy(id_, opmask, proxy_type, args, conn):
     elif proxy_type == ProxyType.set:
         class SetProxy(set):
             def __init__(self):
+                on_proxy_init(self, id_)
                 set.__init__(self, args)
             def __getattribute__(self, name):
                 return conn.getattr(self, name)
         ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
         class ModuleProxy(types.ModuleType):
-            def __init__(self): types.ModuleType.__init__(self, "")
+            def __init__(self):
+                on_proxy_init(self, id_)
+                types.ModuleType.__init__(self, "")
             def __getattribute__(self, name):
                 return conn.getattr(self, name)
         ProxyClass = ModuleProxy
     else:
         class ObjectProxy(object):
+            def __init__(self):
+                on_proxy_init(self, id_)
+                object.__init__(self)
             def __getattribute__(self, name):
                 return conn.getattr(self, name)
         ProxyClass = ObjectProxy
