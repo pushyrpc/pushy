@@ -23,7 +23,7 @@
 
 from pushy.protocol.message import message_types
 import pushy.util
-import types
+import exceptions, types
 
 
 class ProxyType:
@@ -81,27 +81,24 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
 
     # Determine the class to use for the proxy type.
     if proxy_type == ProxyType.stopiteration:
-        class StopIterationProxy(StopIteration, object):
+        class StopIterationProxy(StopIteration):
             def __init__(self):
                 on_proxy_init(self, id_)
                 StopIteration.__init__(self)
-                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = StopIterationProxy
     elif proxy_type == ProxyType.attributeerror:
-        class AttributeErrorProxy(AttributeError, object):
+        class AttributeErrorProxy(AttributeError):
             def __init__(self):
                 on_proxy_init(self, id_)
                 AttributeErrorProxy.__init__(self)
-                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = AttributeErrorProxy
     elif proxy_type == ProxyType.exception:
-        class ExceptionProxy(Exception, object):
+        class ExceptionProxy(Exception):
             def __init__(self):
                 on_proxy_init(self, id_)
                 Exception.__init__(self)
-                object.__init__(self)
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:

@@ -106,7 +106,7 @@ public class Client
     {
         String jpushyLoaderProgram =
             "import subprocess, sys;" +
-            "sys.path.append(sys.argv[1]);" +
+            "sys.path.insert(0, sys.argv[1]);" +
             "import jpushy; jpushy.start()";
 
         // Start XML-RPC server process.
@@ -160,6 +160,10 @@ public class Client
             jpushyServer.destroy();
             throw new RuntimeException(e);
         }
+
+        jpushyServer.getOutputStream().close();
+        jpushyServer.getErrorStream().close();
+        jpushyServer.getInputStream().close();
     }
 
     public void finalize()
