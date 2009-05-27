@@ -427,8 +427,8 @@ class BaseConnection:
 
 
     def __send_message(self, message_type, args):
-        pushy.util.logger.debug("Sending %r", message_type)
         m = Message(message_type, self.__marshal(args))
+        pushy.util.logger.debug("Sending %r", m)
         bytes = m.pack()
         self.__ostream_lock.acquire()
         try:
