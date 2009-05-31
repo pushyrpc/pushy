@@ -204,12 +204,16 @@ def pushy_server():
 
     # Back up old stdin/stdout.
     stdout_fileno = sys.stdout.fileno()
+    stdin_fileno = sys.stdin.fileno()
     old_stdout = os.fdopen(os.dup(stdout_fileno), "wb", 0)
+    old_stdin = os.fdopen(os.dup(stdin_fileno), "rb", 0)
     try_set_binary(old_stdout.fileno())
+    try_set_binary(old_stdin.fileno())
     sys.stdout.close()
+    sys.stdin.close()
 
     # Reconstitute the package hierarchy delivered from the client
-    (packages, modules) = pickle.load(sys.stdin)
+    (packages, modules) = pickle.load(old_stdin)
 
     # Add the package to the in-memory package importer
     importer = InMemoryImporter(packages, modules)
@@ -238,7 +242,7 @@ def pushy_server():
     try:
         import pushy.protocol
         import pushy.util
-        c = pushy.protocol.Connection(sys.stdin, old_stdout, False)
+        c = pushy.protocol.Connection(old_stdin, old_stdout, False)
         c.serve_forever()
         old_stdout.close()
         os.close(stdout_fileno)
@@ -247,7 +251,7 @@ def pushy_server():
         se_redir.join()
     finally:
         old_stdout.close()
-        sys.stdin.close()
+        old_stdin.close()
 
 ###############################################################################
 
@@ -358,6 +362,7 @@ class PushyClient:
 
             # Start a thread for processing asynchronous requests from the peer
             self.serve_thread = threading.Thread(target=remote.serve_forever)
+            self.serve_thread.setDaemon(True)
             self.serve_thread.start()
 
             modules_ = AutoImporter(remote)

@@ -81,6 +81,7 @@ class BaseConnection:
         self.__istream_lock = threading.Lock()
         self.__ostream_lock = threading.Lock()
         self.__request_lock = threading.RLock()
+        self.__pid          = os.getpid() # Record pid in event of a fork
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
@@ -212,7 +213,7 @@ class BaseConnection:
         return self.__handle(m)
 
 
-    def send_response(self, result):
+    def __send_response(self, result):
         # Allow the message receiving thread to proceed. We must do this
         # *before* sending the message, in case the other side is
         # attempting to send a message at the same time.
@@ -467,22 +468,31 @@ class BaseConnection:
         try:
             try:
                 args = self.__unmarshal(m.payload)
-                return self.message_handlers[m.type](m.type, args)
-            except SystemExit, e:
-                self.send_response(e.code)
-                raise e
-            except:
-                if m.type is MessageType.exception:
-                    raise
+                result = self.message_handlers[m.type](m.type, args)
 
-                import sys, traceback
-                (type, value, tb) = sys.exc_info()
-                pushy.util.logger.debug(
-                    "Raising an exception", exc_info=(type, value, tb))
+                # If the message handler caused a fork, then the child process
+                # may get to here (e.g. if os.execve fails to find the program
+                # in PATH, it will raise an exception.)
+                if os.getpid() == self.__pid:
+                    if m.type not in response_types:
+                        self.__send_response(result)
+
+                return result
+            except SystemExit, e:
+                if os.getpid() == self.__pid:
+                    self.__send_response(e.code)
+                raise e
+            except Exception, e:
+                if os.getpid() != self.__pid:
+                    raise e
+
+                # An exception raised while handling an exception message
+                # should be sent up to the caller.
+                if m.type is MessageType.exception:
+                    raise e
 
                 # Send the above three objects to the caller
-                tb = "".join(traceback.format_tb(tb))
-                self.__send_message(MessageType.exception, (type, value, tb))
+                self.__send_message(MessageType.exception, e)
 
                 # Allow the message receiving thread to proceed.
                 self.__processing_condition.acquire()
@@ -492,12 +502,6 @@ class BaseConnection:
                         self.__processing_condition.notify()
                 finally:
                     self.__processing_condition.release()
-
-                # Assigning traceback to a local variable within an exception
-                # handler creates a cyclic reference. Manual deletion required.
-                #
-                # http://docs.python.org/lib/module-sys.html#l2h-5142
-                del type, value, tb
         finally:
             if is_request:
                 self.__thread_local.request_count -= 1
@@ -508,7 +512,7 @@ class BaseConnection:
 
 
     def __handle_exception(self, message_type, e):
-        raise e[1]
+        raise e
 
 
     def __handle_syncrequest(self, message_type, args):

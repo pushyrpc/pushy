@@ -43,11 +43,9 @@ class ProxyType:
 
     @staticmethod
     def get(obj):
-        if isinstance(obj, StopIteration):
-            return ProxyType.stopiteration
-        if isinstance(obj, AttributeError):
-            return ProxyType.attributeerror
         if isinstance(obj, Exception):
+            if obj.__class__.__module__ == "exceptions":
+                return ProxyType.exception, obj.__class__.__name__
             return ProxyType.exception
         if isinstance(obj, dict):
             args = None
@@ -80,25 +78,16 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     """
 
     # Determine the class to use for the proxy type.
-    if proxy_type == ProxyType.stopiteration:
-        class StopIterationProxy(StopIteration):
+    if proxy_type == ProxyType.exception:
+        BaseException = Exception
+        if args is not None:
+            BaseException = getattr(exceptions, args)
+        class ExceptionProxy(BaseException):
             def __init__(self):
                 on_proxy_init(self, id_)
-                StopIteration.__init__(self)
-            def __getattribute__(self, name): return conn.getattr(self, name)
-        ProxyClass = StopIterationProxy
-    elif proxy_type == ProxyType.attributeerror:
-        class AttributeErrorProxy(AttributeError):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                AttributeErrorProxy.__init__(self)
-            def __getattribute__(self, name): return conn.getattr(self, name)
-        ProxyClass = AttributeErrorProxy
-    elif proxy_type == ProxyType.exception:
-        class ExceptionProxy(Exception):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                Exception.__init__(self)
+                pushy.util.logger.debug("Initialising exception")
+                BaseException.__init__(self)
+                pushy.util.logger.debug("Initialised exception")
             def __getattribute__(self, name): return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
@@ -195,8 +184,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
 proxy_names = (
   "object",
   "exception",
-  "stopiteration",
-  "attributeerror",
   "dictionary",
   "list",
   "set",

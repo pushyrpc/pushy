@@ -25,7 +25,9 @@ import logging, os, sys
 logger = logging.getLogger("pushy")
 logger.disabled = True
 if not logger.disabled:
-    logger.addHandler(logging.FileHandler("pushy.%d.log" % os.getpid()))
+    handler = logging.FileHandler("pushy.%d.log" % os.getpid())
+    handler.setFormatter(logging.Formatter("[%(process)d] %(message)s"))
+    logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     logger.debug("sys.argv: %r", sys.argv)
 

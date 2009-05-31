@@ -69,20 +69,20 @@ class Connection(BaseConnection):
 
     def __handle_getattr(self, type, args):
         (object, name) = args
-        self.send_response(getattr(object, name))
+        return getattr(object, name)
 
     def __handle_setattr(self, type, args):
         (object, name, value) = args
-        self.send_response(setattr(object, name, value))
+        return setattr(object, name, value)
 
     def __handle_getstr(self, type, object):
-        self.send_response(str(object))
+        return str(object)
 
     def __handle_getrepr(self, type, object):
-        self.send_response(repr(object))
+        return repr(object)
 
     def __handle_evaluate(self, type, expression):
-        self.send_response(eval(expression))
+        return eval(expression)
 
     def __handle_call(self, type, args_):
         (object, args, kwargs) = args_
@@ -92,7 +92,7 @@ class Connection(BaseConnection):
         # somewhere along the line.
         args, kwargs = list(args), dict(kwargs)
         result = object(*args, **kwargs)
-        self.send_response(result)
+        return result
 
     def __handle_operator(self, type, args):
         (object, args, kwargs) = args
@@ -105,5 +105,5 @@ class Connection(BaseConnection):
         # TODO handle slot pointer methods specially?
         name = type.name[2:]
         method = getattr(object, name)
-        self.send_response(method(*args, **kwargs))
+        return method(*args, **kwargs)
 
