@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, marshal, os, struct, threading
+import logging, marshal, os, struct, sys, threading
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
@@ -492,6 +492,7 @@ class BaseConnection:
                     raise e
 
                 # Send the above three objects to the caller
+                pushy.util.logger.debug("Throwing an exception", exc_info=sys.exc_info())
                 self.__send_message(MessageType.exception, e)
 
                 # Allow the message receiving thread to proceed.
