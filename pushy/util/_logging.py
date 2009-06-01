@@ -25,8 +25,23 @@ import logging, os, sys
 logger = logging.getLogger("pushy")
 logger.disabled = True
 if not logger.disabled:
-    handler = logging.FileHandler("pushy.%d.log" % os.getpid())
-    handler.setFormatter(logging.Formatter("[%(process)d] %(message)s"))
+    class ShutdownSafeFileHandler(logging.FileHandler):
+        """
+        A FileHandler class which protects calls to "close" from concurrent
+        logging operations.
+        """
+        def __init__(self, filename):
+            logging.FileHandler.__init__(self, filename)
+        def close(self):
+            self.acquire()
+            try:
+                logging.FileHandler.close(self)
+            finally:
+                self.release()
+
+    handler = ShutdownSafeFileHandler("pushy.%d.log" % os.getpid())
+    handler.setFormatter(
+        logging.Formatter("[%(process)d:(%(threadName)s)] %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     logger.debug("sys.argv: %r", sys.argv)
