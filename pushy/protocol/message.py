@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, struct
+import os, struct, thread
 import pushy.util
 
 class MessageType:
@@ -45,23 +45,26 @@ class MessageType:
 
 
 class Message:
-    PACKING_FORMAT = ">BI"
+    PACKING_FORMAT = ">BiI"
     PACKING_SIZE   = struct.calcsize(PACKING_FORMAT)
 
-    def __init__(self, type, payload):
+    def __init__(self, type, payload, thread_id):
         self.type     = type
         self.payload  = payload
+        self.thread   = thread_id
 
     def __eq__(self, other):
         if other.__class__ is not Message: return False
-        return self.type == other.type and self.payload == other.payload
+        return self.type == other.type and \
+               self.thread == other.thread and \
+                self.payload == other.payload
 
     def __repr__(self):
-        return "Message(%r, %r [%d bytes])" % (self.type, self.payload,
-                                               len(self.payload))
+        return "Message(%r, %d, %r [%d bytes])" % \
+                   (self.type, self.thread, self.payload, len(self.payload))
 
     def pack(self):
-        result = struct.pack(self.PACKING_FORMAT, int(self.type),
+        result = struct.pack(self.PACKING_FORMAT, int(self.type), self.thread,
                              len(self.payload))
         return result + self.payload
 
@@ -76,7 +79,7 @@ class Message:
             if partial == "":
                 raise IOError, "End of file"
             data += partial
-        (type, length) = struct.unpack(Message.PACKING_FORMAT, data)
+        (type, thread_id, length) = struct.unpack(Message.PACKING_FORMAT, data)
         type = message_types[type]
         if length:
             payload = file.read(length)
@@ -85,7 +88,7 @@ class Message:
             assert len(payload) == length
         else:
             payload = ""
-        return Message(type, payload)
+        return Message(type, payload, thread_id)
 
 ###############################################################################
 # Create enumeration of message types

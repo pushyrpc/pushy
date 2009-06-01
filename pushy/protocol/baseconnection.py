@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, marshal, os, struct, sys, threading
+import logging, marshal, os, struct, sys, thread, threading
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
@@ -62,24 +62,30 @@ class ResponseHandler:
         self.event       = threading.Event()
         self.message     = None
         self.syncrequest = False
+        self.thread      = thread.get_ident()
 
     def clear(self):
         self.event.clear()
-        self.messsage = None
+        self.message = None
 
     def wait(self):
+        pushy.util.logger.debug("Waiting on handler")
         while not self.event.isSet():
             self.event.wait()
-        self.event.clear()
-        return self.message
+        message = self.message
+        self.clear()
+        pushy.util.logger.debug("Returning from handler: %r", message)
+        return message
 
     def get(self):
         if self.event.isSet():
             return self.message
         return None
 
-    def set(self, message):
-        self.message = message
+    def set(self, message=None):
+        if message is not None:
+            self.message = message
+            pushy.util.logger.debug("Setting message on handler: %r", message)
         self.event.set()
 
 
@@ -103,8 +109,8 @@ class BaseConnection:
         }
 
         # Attributes required to track responses.
-        self.__thread_local          = threading.local()
-        self.__response_handlers     = []
+        self.__thread_local      = threading.local()
+        self.__response_handlers = []
 
         # Attributes required to track number of threads processing requests.
         # The following has to be true for the message receiving thread to be
@@ -158,7 +164,7 @@ class BaseConnection:
                         # Wake up request/response handlers.
                         self.__processing_condition.notifyAll()
                         for handler in self.__response_handlers:
-                            handler.set(None)
+                            handler.set()
                         # Wait until there are no more response handlers, and
                         # no requests being processed.
                         while len(self.__response_handlers) > 0 or \
@@ -191,15 +197,16 @@ class BaseConnection:
 
     def serve_forever(self):
         "Serve asynchronous requests from the peer forever."
-        while self.__open:
-            try:
-                m = self.__waitForRequest()
-                if m is not None and self.__open:
-                    self.__handle(m)
-            except IOError:
-                return
-            finally:
-                pushy.util.logger.debug("Leaving serve_forever")
+        try:
+            while self.__open:
+                try:
+                    m = self.__waitForRequest()
+                    if m is not None and self.__open:
+                        self.__handle(m)
+                except IOError:
+                    return
+        finally:
+            pushy.util.logger.debug("Leaving serve_forever")
 
 
     def send_request(self, message_type, args):
@@ -231,19 +238,26 @@ class BaseConnection:
                     if self.__processing == self.__waiting:
                         pushy.util.logger.debug("Notify")
                         self.__processing_condition.notify()
+
+                    # Insert the handler just before the first handler for the
+                    # current thread.
+                    i = 0
+                    while i < len(self.__response_handlers):
+                        if self.__response_handlers[i].thread == \
+                           thread.get_ident():
+                            pushy.util.logger.debug("=> %d", i)
+                            break
+                        else:
+                            i += 1
+                    #i = 0
+                    pushy.util.logger.debug("Inserting handler at %d", i)
+                    self.__response_handlers.insert(i, handler)
                 finally:
                     self.__processing_condition.release()
             else:
                 handler.syncrequest = False
-
-            # The handler and the request message need to be added and sent in
-            # the same order. If it's a syncrequest, then its response handler
-            # should be the next one to be called. Otherwise, add it to the
-            # end.
-            if handler.syncrequest:
-                self.__response_handlers.insert(0, handler)
-            else:
                 self.__response_handlers.append(handler)
+                pushy.util.logger.debug("Appending handler")
 
             # Send the message.
             self.__send_message(message_type, args)
@@ -271,6 +285,7 @@ class BaseConnection:
             self.__processing_condition.release()
 
         # Now send the message.
+        pushy.util.logger.debug("Sending response, type: %r", type(result))
         self.__send_message(MessageType.response, result)
 
 
@@ -300,7 +315,7 @@ class BaseConnection:
                 request = self.__requests[0]
                 del self.__requests[0]
                 if len(self.__response_handlers) > 0:
-                    self.__response_handlers[0].set(None)
+                    self.__response_handlers[0].set()
                 return request
 
             # Release the processing condition, and wait for a message.
@@ -313,14 +328,12 @@ class BaseConnection:
                     # front of the queue. If it's a response to a syncrequest,
                     # decrement the waiting count.
                     self.__responses += 1
-                    response_handler = self.__response_handlers[0]
-                    response_handler.set(m)
+                    self.__response_handlers[0].set(m)
                 elif m.type is MessageType.syncrequest:
                     # Notify the first response handler, and increment the
                     # processing count.
                     self.__processing += 1
-                    response_handler = self.__response_handlers[0]
-                    response_handler.set(m)
+                    self.__response_handlers[0].set(m)
                 else:
                     # We got a request, so return it. If there are any response
                     # handlers waiting, let's wake up the first one so it can
@@ -328,7 +341,7 @@ class BaseConnection:
                     if self.__open:
                         self.__processing += 1
                     if len(self.__response_handlers) > 0:
-                        self.__response_handlers[0].set(None)
+                        self.__response_handlers[0].set()
                     return m
             finally:
                 self.__processing_condition.acquire()
@@ -346,6 +359,7 @@ class BaseConnection:
             # another thread has enqueued a request for us.
             m = handler.get()
             if m is not None:
+                pushy.util.logger.debug("Already set")
                 handler.clear()
             while (self.__open and m is None) and \
                    (self.__receiving or \
@@ -354,15 +368,19 @@ class BaseConnection:
                       (self.__processing > self.__waiting))):
                 self.__processing_condition.release()
                 try:
+                    pushy.util.logger.debug("Going to wait")
+                    pushy.util.logger.debug(
+                        "receiving: %r, first: %r, processing: %d, waiting: %d",
+                        self.__receiving, (handler == self.__response_handlers[0]),
+                        self.__processing, self.__waiting)
+                    if handler != self.__response_handlers[0]:
+                        self.__response_handlers[0].set()
                     m = handler.wait()
-                    if m is not None and \
-                       m.type not in response_types and \
-                       m.type is not MessageType.syncrequest:
-                        self.__requests.append(m)
-                        self.__processing_condition.notify()
-                        m = None
                 finally:
                     self.__processing_condition.acquire()
+
+            pushy.util.logger.debug("m = %r (%r)", m, id(m))
+            pushy.util.logger.debug("handler.get() = %r", handler.get())
 
             # Wait until we've got a response/syncrequest.
             if m is None and self.__open:
@@ -370,10 +388,16 @@ class BaseConnection:
                 self.__processing_condition.release()
                 try:
                     m = self.__recv()
+                    if handler != self.__response_handlers[0]:
+                        print >> open("kersplat", "w"), "we're not first"
                     while m.type not in response_types and \
                           m.type is not MessageType.syncrequest:
+                        if os.getpid() != self.__pid:
+                            print >> open("kersplat", "w"), "uh oh"
                         self.__requests.append(m)
                         m = self.__recv()
+                        if handler != self.__response_handlers[0]:
+                            print >> open("kersplat", "w"), "we're not first"
                 finally:
                     self.__processing_condition.acquire()
                     self.__receiving = False
@@ -572,11 +596,6 @@ class BaseConnection:
                 if m.type is MessageType.exception:
                     raise e
 
-                # Send the above three objects to the caller
-                pushy.util.logger.debug(
-                    "Throwing an exception", exc_info=sys.exc_info())
-                self.__send_message(MessageType.exception, e)
-
                 # Allow the message receiving thread to proceed.
                 self.__processing_condition.acquire()
                 try:
@@ -585,6 +604,11 @@ class BaseConnection:
                         self.__processing_condition.notify()
                 finally:
                     self.__processing_condition.release()
+
+                # Send the above three objects to the caller
+                pushy.util.logger.debug(
+                    "Throwing an exception", exc_info=sys.exc_info())
+                self.__send_message(MessageType.exception, e)
         finally:
             if is_request:
                 self.__thread_local.request_count -= 1
