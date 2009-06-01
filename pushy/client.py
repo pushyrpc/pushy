@@ -242,8 +242,8 @@ def pushy_server():
     try:
         import pushy.protocol
         import pushy.util
-        c = pushy.protocol.Connection(old_stdin, old_stdout, False)
-        c.serve_forever()
+        import pushy.server
+        pushy.server.serve_forever(old_stdin, old_stdout)
         old_stdout.close()
         os.close(stdout_fileno)
         os.close(sys.__stderr__.fileno())
