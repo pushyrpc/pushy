@@ -403,12 +403,12 @@ class PushyClient:
         return self.remote.eval(code)
 
     def close(self):
-        if self.server is not None:
-            self.server.close()
         if self.remote is not None:
             self.remote.close()
         if self.serve_thread is not None:
             self.serve_thread.join()
+        if self.server is not None:
+            self.server.close()
 
     def load_packages(self):
         if self.pushy_packages is None:
