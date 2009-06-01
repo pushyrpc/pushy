@@ -63,6 +63,10 @@ class ResponseHandler:
         self.message     = None
         self.syncrequest = False
 
+    def clear(self):
+        self.event.clear()
+        self.messsage = None
+
     def wait(self):
         while not self.event.isSet():
             self.event.wait()
@@ -315,6 +319,8 @@ class BaseConnection:
             # Wait until we're allowed to read from the input stream, or
             # another thread has enqueued a request for us.
             m = handler.get()
+            if m is not None:
+                handler.clear()
             while (self.__open and m is None) and \
                    (self.__receiving or \
                     (handler != self.__response_handlers[0]) or \
