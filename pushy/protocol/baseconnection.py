@@ -62,11 +62,18 @@ class ResponseHandler:
         self.event       = threading.Event()
         self.message     = None
         self.syncrequest = False
+
     def wait(self):
         while not self.event.isSet():
             self.event.wait()
         self.event.clear()
         return self.message
+
+    def get(self):
+        if self.event.isSet():
+            return self.message
+        return None
+
     def set(self, message):
         self.message = message
         self.event.set()
@@ -74,14 +81,15 @@ class ResponseHandler:
 
 class BaseConnection:
     def __init__(self, istream, ostream, initiator=True):
-        self.__open         = True
-        self.__istream      = istream
-        self.__ostream      = ostream
-        self.__initiator    = initiator
-        self.__istream_lock = threading.Lock()
-        self.__ostream_lock = threading.Lock()
-        self.__request_lock = threading.RLock()
-        self.__pid          = os.getpid() # Record pid in event of a fork
+        self.__open           = True
+        self.__istream        = istream
+        self.__ostream        = ostream
+        self.__initiator      = initiator
+        self.__istream_lock   = threading.Lock()
+        self.__ostream_lock   = threading.Lock()
+        self.__request_lock   = threading.RLock()
+        self.__unmarshal_lock = threading.Lock()
+        self.__pid            = os.getpid() # Record pid in event of a fork
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
@@ -105,6 +113,7 @@ class BaseConnection:
         self.__receiving  = False # Is someone calling self.__recv?
         self.__processing = 0  # How many requests are being processed.
         self.__waiting    = 0  # How many syncrequest responses are pending.
+        self.__responses  = 0
         self.__requests   = []
         self.__processing_condition = threading.Condition(threading.Lock())
 
@@ -114,6 +123,9 @@ class BaseConnection:
 
         # (Client) Contains mapping of id(obj) -> proxy
         self.__proxies = {}
+        # (Client) Contains mapping of id(obj) -> threading.Event, which
+        # __unmarshal will use to synchronise the order of messages.
+        self.__pending_proxies = {}
         # (Client) Contains mapping of id(proxy) -> id(obj)
         self.__proxy_ids = {}
         # (Server) Contains mapping of id(obj) -> obj
@@ -192,15 +204,19 @@ class BaseConnection:
                         self.__processing_condition.notify()
                 finally:
                     self.__processing_condition.release()
+            else:
+                handler.syncrequest = False
 
             # The handler and the request message need to be added and sent in
-            # the same order. # If it's a syncrequest, then its response
-            # handler should be the next one to be called. Otherwise, add it to
-            # the end.
+            # the same order. If it's a syncrequest, then its response handler
+            # should be the next one to be called. Otherwise, add it to the
+            # end.
             if handler.syncrequest:
                 self.__response_handlers.insert(0, handler)
             else:
                 self.__response_handlers.append(handler)
+
+            # Send the message.
             self.__send_message(message_type, args)
         finally:
             self.__request_lock.release()
@@ -230,6 +246,7 @@ class BaseConnection:
 
 
     def __waitForRequest(self):
+        pushy.util.logger.debug("Enter waitForRequest")
         # Wait for a request message. If a response message is received first,
         # then set the relevant response handler and wait until we're allowed
         # to read a message before proceeding.
@@ -239,14 +256,18 @@ class BaseConnection:
             # another thread has enqueued a request for us.
             while (self.__open and (len(self.__requests) == 0)) and \
                    (self.__receiving or \
-                    (self.__processing > 0 and \
-                     (self.__processing > self.__waiting))):
+                    self.__responses > 0 or \
+                     (self.__processing > 0 and \
+                      (self.__processing > self.__waiting))):
                 self.__processing_condition.wait()
 
             # Check if another thread received a request message.
             if len(self.__requests) > 0:
+                self.__processing += 1
                 request = self.__requests[0]
                 del self.__requests[0]
+                if len(self.__response_handlers) > 0:
+                    self.__response_handlers[0].set(None)
                 return request
 
             # Check if the connection is still open.
@@ -262,21 +283,20 @@ class BaseConnection:
                     # Notify the first response handler, and pop it off the
                     # front of the queue. If it's a response to a syncrequest,
                     # decrement the waiting count.
+                    self.__responses += 1
                     response_handler = self.__response_handlers[0]
-                    del self.__response_handlers[0]
                     response_handler.set(m)
-                    if response_handler.syncrequest:
-                        self.__waiting -= 1
                 elif m.type is MessageType.syncrequest:
                     # Notify the first response handler, and increment the
                     # processing count.
+                    self.__processing += 1
                     response_handler = self.__response_handlers[0]
                     response_handler.set(m)
-                    self.__processing += 1
                 else:
                     # We got a request, so return it. If there are any response
                     # handlers waiting, let's wake up the first one so it can
                     # wait for a message.
+                    self.__processing += 1
                     if len(self.__response_handlers) > 0:
                         self.__response_handlers[0].set(None)
                     return m
@@ -285,18 +305,21 @@ class BaseConnection:
                 self.__receiving = False
         finally:
             self.__processing_condition.release()
+            pushy.util.logger.debug("Leave waitForRequest")
 
 
     def __waitForResponse(self, handler):
+        pushy.util.logger.debug("Enter waitForResponse")
         self.__processing_condition.acquire()
         try:
             # Wait until we're allowed to read from the input stream, or
             # another thread has enqueued a request for us.
-            m = None
+            m = handler.get()
             while (self.__open and m is None) and \
                    (self.__receiving or \
-                    (self.__processing > 0 and \
-                     (self.__processing > self.__waiting))):
+                    (handler != self.__response_handlers[0]) or \
+                     (self.__processing > 0 and \
+                      (self.__processing > self.__waiting))):
                 self.__processing_condition.release()
                 try:
                     m = handler.wait()
@@ -326,16 +349,23 @@ class BaseConnection:
                 # Update processing/waiting counts.
                 if m.type in response_types:
                     del self.__response_handlers[0]
-                    if handler.syncrequest:
-                        self.__waiting -= 1
                 elif m.type is MessageType.syncrequest:
                     self.__processing += 1
+            else:
+                if m.type in response_types:
+                    del self.__response_handlers[0]
+                    self.__responses -= 1
+
+            # Delete handler.
+            if handler.syncrequest:
+                self.__waiting -= 1
 
             # Return the message.
             return m
         finally:
             self.__processing_condition.notify()
             self.__processing_condition.release()
+            pushy.util.logger.debug("Leave waitForResponse")
 
 
     def __marshal(self, obj):
@@ -408,9 +438,35 @@ class BaseConnection:
                     args = self.__unmarshal(id_[3])
                 p = Proxy(id_[0], id_[1], id_[2], args, self,
                           self.__register_proxy)
+
+                # Wake anyone waiting on this ID to be unmarshalled.
+                self.__unmarshal_lock.acquire()
+                try:
+                    if id_[0] in self.__pending_proxies:
+                        event = self.__pending_proxies[id_[0]]
+                        del self.__pending_proxies[id_[0]]
+                        event.set()
+                finally:
+                    self.__unmarshal_lock.release()
+
                 return p
             else:
                 # Known object: id
+                if id_ not in self.__proxies:
+                    self.__unmarshal_lock.acquire()
+                    try:
+                        if id_ not in self.__proxies:
+                            event = self.__pending_proxies.get(id_, None)
+                            if event is None:
+                                event = threading.Event()
+                                self.__pending_proxies[id_] = event
+                    finally:
+                        self.__unmarshal_lock.release()
+
+                    # Wait for the event to be set.
+                    if id_ not in self.__proxies:
+                        event.wait()
+
                 return self.__proxies[id_]
         elif payload.startswith("o"):
             # The object originated here.
