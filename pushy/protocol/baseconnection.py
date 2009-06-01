@@ -145,23 +145,48 @@ class BaseConnection:
         pushy.util.logger.debug("Closing connection")
         try:
             if self.__open:
-                self.__open = False
-                self.__ostream_lock.acquire()
+                self.__request_lock.acquire()
+                if not self.__open:
+                    return
                 try:
-                    self.__ostream.close()
-                    pushy.util.logger.debug("Closed ostream")
+                    # Flag the connection as closed, and wake up all request
+                    # handlers. We'll then wait until there are no more
+                    # response handlers waiting.
+                    self.__open = False
+                    self.__processing_condition.acquire()
+                    try:
+                        # Wake up request/response handlers.
+                        self.__processing_condition.notifyAll()
+                        for handler in self.__response_handlers:
+                            handler.set(None)
+                        # Wait until there are no more response handlers, and
+                        # no requests being processed.
+                        while len(self.__response_handlers) > 0 or \
+                              self.__processing > 0:
+                            self.__processing_condition.wait()
+                    finally:
+                        self.__processing_condition.release()
+
+                    self.__ostream_lock.acquire()
+                    try:
+                        self.__ostream.close()
+                        pushy.util.logger.debug("Closed ostream")
+                    finally:
+                        self.__ostream_lock.release()
+                    self.__istream_lock.acquire()
+                    try:
+                        self.__istream.close()
+                        pushy.util.logger.debug("Closed istream")
+                    finally:
+                        self.__istream_lock.release()
                 finally:
-                    self.__ostream_lock.release()
-                self.__istream_lock.acquire()
-                try:
-                    self.__istream.close()
-                    pushy.util.logger.debug("Closed istream")
-                finally:
-                    self.__istream_lock.release()
+                    self.__request_lock.release()
         except:
             import traceback
             traceback.print_exc()
             pushy.util.logger.debug(traceback.format_exc())
+        finally:
+            pushy.util.logger.debug("Closed connection")
 
 
     def serve_forever(self):
@@ -169,21 +194,21 @@ class BaseConnection:
         while self.__open:
             try:
                 m = self.__waitForRequest()
-                if m is not None:
+                if m is not None and self.__open:
                     self.__handle(m)
             except IOError:
-                pushy.util.logger.debug("IOError")
                 return
-            except:
-                import traceback
-                pushy.util.logger.critical(traceback.format_exc())
-                raise
+            finally:
+                pushy.util.logger.debug("Leaving serve_forever")
 
 
     def send_request(self, message_type, args):
         "Send a request message and wait for a response."
         self.__request_lock.acquire()
         try:
+            if not self.__open:
+                raise Exception, "Connection is closed"
+
             # Send the request. Send it as a 'syncrequest' if the request
             # is made from the handler of a request from the peer.
             if getattr(self.__thread_local, "request_count", 0) > 0:
@@ -265,6 +290,10 @@ class BaseConnection:
                       (self.__processing > self.__waiting))):
                 self.__processing_condition.wait()
 
+            # Check if the connection is still open.
+            if not self.__open:
+                return None
+
             # Check if another thread received a request message.
             if len(self.__requests) > 0:
                 self.__processing += 1
@@ -273,10 +302,6 @@ class BaseConnection:
                 if len(self.__response_handlers) > 0:
                     self.__response_handlers[0].set(None)
                 return request
-
-            # Check if the connection is still open.
-            if not self.__open:
-                return None
 
             # Release the processing condition, and wait for a message.
             self.__receiving = True
@@ -300,7 +325,8 @@ class BaseConnection:
                     # We got a request, so return it. If there are any response
                     # handlers waiting, let's wake up the first one so it can
                     # wait for a message.
-                    self.__processing += 1
+                    if self.__open:
+                        self.__processing += 1
                     if len(self.__response_handlers) > 0:
                         self.__response_handlers[0].set(None)
                     return m
@@ -357,7 +383,7 @@ class BaseConnection:
                     del self.__response_handlers[0]
                 elif m.type is MessageType.syncrequest:
                     self.__processing += 1
-            else:
+            elif self.__open:
                 if m.type in response_types:
                     del self.__response_handlers[0]
                     self.__responses -= 1
@@ -367,6 +393,9 @@ class BaseConnection:
                 self.__waiting -= 1
 
             # Return the message.
+            if not self.__open and m is None:
+                del self.__response_handlers[0]
+                raise Exception, "Connection is closed"
             return m
         finally:
             self.__processing_condition.notify()
@@ -531,30 +560,21 @@ class BaseConnection:
             try:
                 args = self.__unmarshal(m.payload)
                 result = self.message_handlers[m.type](m.type, args)
-
-                # If the message handler caused a fork, then the child process
-                # may get to here (e.g. if os.execve fails to find the program
-                # in PATH, it will raise an exception.)
-                if os.getpid() == self.__pid:
-                    if m.type not in response_types:
-                        self.__send_response(result)
-
+                if m.type not in response_types:
+                    self.__send_response(result)
                 return result
             except SystemExit, e:
-                if os.getpid() == self.__pid:
-                    self.__send_response(e.code)
+                self.__send_response(e.code)
                 raise e
             except Exception, e:
-                if os.getpid() != self.__pid:
-                    raise e
-
                 # An exception raised while handling an exception message
                 # should be sent up to the caller.
                 if m.type is MessageType.exception:
                     raise e
 
                 # Send the above three objects to the caller
-                pushy.util.logger.debug("Throwing an exception", exc_info=sys.exc_info())
+                pushy.util.logger.debug(
+                    "Throwing an exception", exc_info=sys.exc_info())
                 self.__send_message(MessageType.exception, e)
 
                 # Allow the message receiving thread to proceed.
