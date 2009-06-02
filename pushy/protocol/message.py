@@ -45,27 +45,32 @@ class MessageType:
 
 
 class Message:
-    PACKING_FORMAT = ">BiI"
+    PACKING_FORMAT = ">BiiI"
     PACKING_SIZE   = struct.calcsize(PACKING_FORMAT)
 
-    def __init__(self, type, payload, thread_id):
+    def __init__(self, type, payload, target=0, source=None):
         self.type     = type
         self.payload  = payload
-        self.thread   = thread_id
+        self.target   = target
+        if source is None:
+            source = thread.get_ident()
+        self.source = source
 
     def __eq__(self, other):
         if other.__class__ is not Message: return False
         return self.type == other.type and \
-               self.thread == other.thread and \
-                self.payload == other.payload
+               self.source == other.source and \
+               self.target == other.target and \
+               self.payload == other.payload
 
     def __repr__(self):
-        return "Message(%r, %d, %r [%d bytes])" % \
-                   (self.type, self.thread, self.payload, len(self.payload))
+        return "Message(%r, %d->%d, %r [%d bytes])" % \
+                   (self.type, self.source, self.target, self.payload,
+                    len(self.payload))
 
     def pack(self):
-        result = struct.pack(self.PACKING_FORMAT, int(self.type), self.thread,
-                             len(self.payload))
+        result = struct.pack(self.PACKING_FORMAT, int(self.type), self.source,
+                             self.target, len(self.payload))
         return result + self.payload
 
     @staticmethod
@@ -79,7 +84,8 @@ class Message:
             if partial == "":
                 raise IOError, "End of file"
             data += partial
-        (type, thread_id, length) = struct.unpack(Message.PACKING_FORMAT, data)
+        (type, source, target, length) = \
+            struct.unpack(Message.PACKING_FORMAT, data)
         type = message_types[type]
         if length:
             payload = file.read(length)
@@ -88,7 +94,7 @@ class Message:
             assert len(payload) == length
         else:
             payload = ""
-        return Message(type, payload, thread_id)
+        return Message(type, payload, target, source)
 
 ###############################################################################
 # Create enumeration of message types

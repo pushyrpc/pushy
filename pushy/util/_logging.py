@@ -23,7 +23,7 @@
 
 import logging, os, sys
 logger = logging.getLogger("pushy")
-logger.disabled = True
+#logger.disabled = True
 if not logger.disabled:
     class ShutdownSafeFileHandler(logging.FileHandler):
         """
@@ -41,7 +41,8 @@ if not logger.disabled:
 
     handler = ShutdownSafeFileHandler("pushy.%d.log" % os.getpid())
     handler.setFormatter(
-        logging.Formatter("[%(process)d:(%(threadName)s)] %(message)s"))
+        logging.Formatter(
+            "[%(process)d:(%(threadName)s:%(thread)d)] %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     logger.debug("sys.argv: %r", sys.argv)
