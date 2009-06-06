@@ -23,7 +23,7 @@
 
 import logging, os, sys
 logger = logging.getLogger("pushy")
-#logger.disabled = True
+logger.disabled = True
 if not logger.disabled:
     class ShutdownSafeFileHandler(logging.FileHandler):
         """
