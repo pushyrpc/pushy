@@ -329,8 +329,7 @@ class BaseConnection:
                     self.__processing_condition.acquire()
                     self.__receiving = False
             elif self.__open:
-                if handler.message.type in response_types:
-                    self.__responses -= 1
+                self.__responses -= 1
 
             if handler.message is not None:
                 if handler.message.type is MessageType.syncrequest:
