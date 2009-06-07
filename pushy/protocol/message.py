@@ -103,7 +103,6 @@ class Message:
 message_names = (
   "evaluate",
   "response",
-  "syncrequest",
   "exception",
   "getattr",
   "setattr",

@@ -61,11 +61,10 @@ class ResponseHandler:
     def __init__(self, condition):
         self.condition   = condition
         self.message     = None
-        self.syncrequest = False
         self.thread      = thread.get_ident()
 
 
-class BaseConnection:
+class BaseConnection(object):
     def __init__(self, istream, ostream, initiator=True):
         self.__open           = True
         self.__istream        = istream
@@ -80,7 +79,6 @@ class BaseConnection:
         self.message_handlers = {
             MessageType.response:    self.__handle_response,
             MessageType.exception:   self.__handle_exception,
-            MessageType.syncrequest: self.__handle_syncrequest
         }
 
         # Attributes required to track responses.
@@ -93,11 +91,11 @@ class BaseConnection:
         #     - There are no threads currently processing a request, and
         #       there are no requests pending.
         #  OR
-        #     - There are threads currently processing a request, but they
-        #       are all waiting on responses to syncrequests.
+        #     - There are threads currently processing requests, but they
+        #       are all waiting on responses.
         self.__receiving  = False # Is someone calling self.__recv?
         self.__processing = 0  # How many requests are being processed.
-        self.__waiting    = 0  # How many syncrequest responses are pending.
+        self.__waiting    = 0  # How many responses are pending.
         self.__responses  = 0
         self.__requests   = []
         self.__processing_condition = threading.Condition(threading.Lock())
@@ -120,6 +118,24 @@ class BaseConnection:
     def __del__(self):
         if self.__open:
             self.close()
+
+
+    # Property for determining the number of requests the current thread is
+    # processing.
+    def __get_thread_request_count(self):
+        return getattr(self.__thread_local, "request_count", 0)
+    def __set_thread_request_count(self, value):
+        self.__thread_local.request_count = value
+    __thread_request_count = \
+        property(__get_thread_request_count, __set_thread_request_count)
+
+
+    # Property for getting the current thread's peer thread.
+    def __get_peer_thread(self):
+        return getattr(self.__thread_local, "peer_thread", 0)
+    def __set_peer_thread(self, value):
+        self.__thread_local.peer_thread = value
+    __peer_thread = property(__get_peer_thread, __set_peer_thread)
 
 
     def close(self):
@@ -178,26 +194,16 @@ class BaseConnection:
     def send_request(self, message_type, args):
         "Send a request message and wait for a response."
 
-        # Send the request. Send it as a 'syncrequest' if the request
-        # is made from the handler of a request from the peer.
-        if getattr(self.__thread_local, "request_count", 0) > 0:
-            pushy.util.logger.debug(
-                "Converting %r to a syncrequest", message_type)
-            args = (message_type.code, self.__marshal(args))
-            message_type = MessageType.syncrequest
-
         # Create a new response handler.
         handler = ResponseHandler(self.__processing_condition)
 
-        # If the a syncrequest is made, then reduce the 'processing' count,
-        # so the message receiving thread may attempt to receive messages.
+        # If a request is being processed, then increase the 'waiting' count,
+        # so other threads may attempt to receive messages.
         self.__processing_condition.acquire()
         try:
             if not self.__open:
                 raise Exception, "Connection is closed"
-
-            if message_type == MessageType.syncrequest:
-                handler.syncrequest = True
+            if self.__thread_request_count > 0:
                 self.__waiting += 1
                 if self.__processing == self.__waiting:
                     self.__processing_condition.notify()
@@ -211,8 +217,7 @@ class BaseConnection:
         # Wait for the response handler to be signalled.
         try:
             m = self.__waitForResponse(handler)
-            while self.__open and \
-                  (m is None or m.type is MessageType.syncrequest):
+            while self.__open and (m is None or m.type not in response_types):
                 if m is not None:
                     self.__handle(m)
                 m = self.__waitForResponse(handler)
@@ -272,17 +277,12 @@ class BaseConnection:
             notifyAll = True
             try:
                 m = self.__recv()
-                if m.type in response_types or \
-                   m.type is MessageType.syncrequest:
-                    # Notify the first response handler, and pop it off the
-                    # front of the queue. If it's a response to a syncrequest,
-                    # decrement the waiting count.
+                if m.target != 0:
                     self.__responses += 1
                     self.__response_handlers[m.target].message = m
                 else:
-                    # We got a request, so return it. If there are any response
-                    # handlers waiting, let's wake up the first one so it can
-                    # wait for a message.
+                    # We got a request, so return it. Wake up one other thread
+                    # waiting to receive a message.
                     if self.__open:
                         self.__processing += 1
                     notifyAll = False
@@ -312,14 +312,13 @@ class BaseConnection:
                 self.__processing_condition.notify()
                 self.__processing_condition.wait()
 
-            # Wait until we've got a response/syncrequest.
+            # Wait until we've got a response message.
             if handler.message is None and self.__open:
                 self.__receiving = True
                 self.__processing_condition.release()
                 try:
                     m = self.__recv()
-                    if m.type not in response_types and \
-                       m.type is not MessageType.syncrequest:
+                    if m.target == 0:
                         self.__requests.insert(0, m)
                     else:
                         self.__response_handlers[m.target].message = m
@@ -332,12 +331,13 @@ class BaseConnection:
                 self.__responses -= 1
 
             if handler.message is not None:
-                if handler.message.type is MessageType.syncrequest:
+                if handler.message.type not in response_types:
+                    # Increment 'processing' count.
                     self.__processing += 1
-                if handler.syncrequest:
-                    # If we were waiting on a response for a syncrequest, let
-                    # the request handler thread know that we're once againt
-                    # processing our request.
+                elif self.__thread_request_count > 0:
+                    # If we were waiting on a response, let the request
+                    # handler thread know that we're once again processing our
+                    # request.
                     self.__waiting -= 1
             elif not self.__open:
                 raise Exception, "Connection is closed"
@@ -466,12 +466,7 @@ class BaseConnection:
 
 
     def __send_message(self, message_type, args):
-        thread_id = 0
-        if message_type in response_types or \
-           message_type is MessageType.syncrequest:
-            thread_id = self.__thread_local.peer_thread
-            assert thread_id is not None
-
+        thread_id = self.__peer_thread
         m = Message(message_type, self.__marshal(args), thread_id)
         pushy.util.logger.debug("Sending %r (%r)", m, thread_id)
         bytes = m.pack()
@@ -501,15 +496,12 @@ class BaseConnection:
 
         # Track the number of requests being processed in this thread. May be
         # greater than one, if there is to-and-fro. We need to track this so
-        # we know when to send a 'syncrequest' message.
+        # we know when to set the 'peer_thread'.
         is_request = m.type not in response_types
         if is_request:
-            self.__thread_local.request_count = \
-                getattr(self.__thread_local, "request_count", 0) + 1
-
+            self.__thread_request_count += 1
             if self.__thread_local.request_count == 1:
-                pushy.util.logger.debug("Received my first request: %r", m)
-                self.__thread_local.peer_thread = m.source
+                self.__peer_thread = m.source
 
         try:
             try:
@@ -544,7 +536,7 @@ class BaseConnection:
             if is_request:
                 self.__thread_local.request_count -= 1
                 if self.__thread_local.request_count == 0:
-                    del self.__thread_local.peer_thread
+                    self.__peer_thread = 0
 
 
     def __handle_response(self, message_type, result):
@@ -553,13 +545,4 @@ class BaseConnection:
 
     def __handle_exception(self, message_type, e):
         raise e
-
-
-    def __handle_syncrequest(self, message_type, args):
-        "Synchronous requests (i.e. requests in response to another request.)"
-        real_message_type_code, payload = args
-        real_message_type = message_types[real_message_type_code]
-        pushy.util.logger.debug("Real message type: %r", real_message_type)
-        return self.message_handlers[real_message_type](
-                   real_message_type, self.__unmarshal(payload))
 

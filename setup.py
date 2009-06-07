@@ -47,8 +47,9 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX",
     "Programming Language :: Python",
+    "Programming Language :: Java",
     "License :: OSI Approved :: MIT License",
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Object Brokering",
     "Topic :: Software Development :: Testing",
@@ -61,7 +62,7 @@ dependencies = [
 
 setup(
     name="pushy",
-    version="0.2",
+    version="0.3",
     description = description,
     long_description = long_description,
     classifiers = classifiers,
