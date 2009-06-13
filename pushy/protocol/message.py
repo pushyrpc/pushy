@@ -45,7 +45,7 @@ class MessageType:
 
 
 class Message:
-    PACKING_FORMAT = ">BiiI"
+    PACKING_FORMAT = ">BqqI"
     PACKING_SIZE   = struct.calcsize(PACKING_FORMAT)
 
     def __init__(self, type, payload, target=0, source=None):

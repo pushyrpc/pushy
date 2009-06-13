@@ -53,7 +53,7 @@ L{pushy.connect<pushy.connect>}. This function will return a connection object,
 which provides access to the remote interpreter's modules, whose classes,
 objects and functions can be transparently accessed from the local interpreter.
 
-@version: 0.2
+@version: 0.3
 @author: Andrew Wilkins
 @contact: axwalk@gmail.com
 @license: MIT

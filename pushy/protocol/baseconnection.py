@@ -151,11 +151,6 @@ class BaseConnection(object):
             try:
                 # Wake up request/response handlers.
                 self.__processing_condition.notifyAll()
-                # Wait until there are no more response handlers, and
-                # no requests being processed.
-                while len(self.__response_handlers) > 0 or \
-                      self.__processing > 0:
-                    self.__processing_condition.wait()
             finally:
                 self.__processing_condition.release()
 

@@ -32,6 +32,7 @@ def parse_args():
     parser = OptionParser(usage = "%prog [options] target")
     parser.add_option("-u", "--username", dest="username")
     parser.add_option("-p", "--password", dest="password")
+    parser.add_option("--python", dest="python", default="python")
     (options, args) = parser.parse_args()
     if len(args) == 0:
         parser.error("missing target argument")
@@ -41,5 +42,7 @@ def get_connection():
     (options, args) = parse_args()
     username = options.username
     password = options.password
-    return pushy.connect(args[0], username=username, password=password)
+    python   = options.python
+    return pushy.connect(args[0], username=username, password=password,
+                         python=python)
 
