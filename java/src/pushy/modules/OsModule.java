@@ -36,6 +36,7 @@ import java.util.Map;
 public class OsModule extends Module {
     private PushyObject killMethod;
     private PushyObject removeMethod;
+    private PushyObject rmdirMethod;
     private PushyObject mkdirMethod;
     private PushyObject makedirsMethod;
     private PushyObject statMethod;
@@ -47,6 +48,7 @@ public class OsModule extends Module {
         if (__hasattr__("kill"))
             killMethod = (PushyObject)__getattr__("kill");
         removeMethod = (PushyObject)__getattr__("remove");
+        rmdirMethod = (PushyObject)__getattr__("rmdir");
         mkdirMethod = (PushyObject)__getattr__("mkdir");
         makedirsMethod = (PushyObject)__getattr__("makedirs");
         statMethod = (PushyObject)__getattr__("stat");
@@ -69,6 +71,10 @@ public class OsModule extends Module {
 
     public void remove(String path) {
         removeMethod.__call__(new Object[]{path});
+    }
+
+    public void rmdir(String path) {
+        rmdirMethod.__call__(new Object[]{path});
     }
 
     public void mkdir(String path) {
