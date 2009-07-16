@@ -130,7 +130,8 @@ class PushyPackageLoader:
             modulename = os.path.basename(fname)[:-4]
             self.__modules[modulename] = f.read()
         else:
-            code = compile(open(fname).read(), fname, "exec")
+            #code = compile(open(fname).read(), fname, "exec")
+            code = open(fname).read()
             modulename = os.path.basename(fname)[:-3]
             self.__modules[modulename] = marshal.dumps(code)
 
@@ -199,21 +200,15 @@ def try_set_binary(fd):
         msvcrt.setmode(fd, os.O_BINARY)
     except ImportError: pass
 
-def pushy_server():
+def pushy_server(stdin, stdout):
     import pickle, sys
 
-    # Back up old stdin/stdout.
-    stdout_fileno = sys.stdout.fileno()
-    stdin_fileno = sys.stdin.fileno()
-    old_stdout = os.fdopen(os.dup(stdout_fileno), "wb", 0)
-    old_stdin = os.fdopen(os.dup(stdin_fileno), "rb", 0)
-    try_set_binary(old_stdout.fileno())
-    try_set_binary(old_stdin.fileno())
-    sys.stdout.close()
-    sys.stdin.close()
+    STDIN_FILENO  = 0
+    STDOUT_FILENO = 1
+    STDERR_FILENO = 2
 
     # Reconstitute the package hierarchy delivered from the client
-    (packages, modules) = pickle.load(old_stdin)
+    (packages, modules) = pickle.load(stdin)
 
     # Add the package to the in-memory package importer
     importer = InMemoryImporter(packages, modules)
@@ -225,8 +220,8 @@ def pushy_server():
     import pushy.util
     (so_r, so_w) = os.pipe()
     (se_r, se_w) = os.pipe()
-    os.dup2(so_w, stdout_fileno)
-    os.dup2(se_w, sys.__stderr__.fileno())
+    os.dup2(so_w, STDOUT_FILENO)
+    os.dup2(se_w, STDERR_FILENO)
     for f in (so_r, so_w, se_r, se_w):
         try_set_binary(f)
     os.close(so_w)
@@ -243,15 +238,15 @@ def pushy_server():
         import pushy.protocol
         import pushy.util
         import pushy.server
-        pushy.server.serve_forever(old_stdin, old_stdout)
-        old_stdout.close()
-        os.close(stdout_fileno)
-        os.close(sys.__stderr__.fileno())
+        pushy.server.serve_forever(stdin, stdout)
+        stdout.close()
+        os.close(STDOUT_FILENO)
+        os.close(STDERR_FILENO)
         so_redir.join()
         se_redir.join()
     finally:
-        old_stdout.close()
-        old_stdin.close()
+        stdout.close()
+        stdin.close()
 
 ###############################################################################
 
@@ -269,17 +264,27 @@ class AutoImporter:
 # Read the source for the server into a string. If we're the server, we'll
 # have defined __builtin__.pushy_source (by the "realServerLoaderSource").
 if not hasattr(__builtin__, "pushy_source"):
+    # If Jython is used, don't try to byte-compile the source. Just send the
+    # source code on through.
+    jython = sys.platform.startswith("java")
+    should_compile = (not jython)
+
     if "__loader__" in locals():
-        code_ = __loader__.get_code(__name__)
-        serverSource = marshal.dumps(code_)
+        if should_compile:
+            serverSource = __loader__.get_code(__name__)
+        else:
+            serverSource = __loader__.get_source(__name__)
+            serverSource = marshal.dumps(serverSource)
     else:
         if __file__.endswith(".pyc"):
             f = open(__file__, "rb")
             f.seek(struct.calcsize("<4bL"))
             serverSource = f.read()
         else:
-            code_ = compile(open(__file__).read(), __file__, "exec")
-            serverSource = marshal.dumps(code_)
+            serverSource = open(__file__).read()
+            if should_compile:
+                serverSource = compile(serverSource, __file__, "exec")
+            serverSource = marshal.dumps(serverSource)
 else:
     serverSource = __builtin__.pushy_source
 md5ServerSource = hashlib.md5(serverSource).digest()
@@ -293,11 +298,34 @@ try:
     import hashlib
 except ImportError:
     import md5 as hashlib
-serverSource = sys.stdin.read(%d)
-assert hashlib.md5(serverSource).digest() == %r
-__builtin__.pushy_source = serverSource
-exec marshal.loads(serverSource)
-pushy_server()
+
+# Back up old stdin/stdout.
+stdout = os.fdopen(os.dup(sys.stdout.fileno()), "wb", 0)
+stdin = os.fdopen(os.dup(sys.stdin.fileno()), "rb", 0)
+try:
+    import msvcrt
+    msvcrt.setmode(stdout.fileno(), os.O_BINARY)
+    msvcrt.setmode(stdin.fileno(), os.O_BINARY)
+except ImportError: pass
+sys.stdout.close()
+sys.stdin.close()
+
+serverSourceLength = %d
+serverSource = stdin.read(serverSourceLength)
+while len(serverSource) < serverSourceLength:
+    serverSource += stdin.read(serverSourceLength - len(serverSource))
+
+try:
+    assert hashlib.md5(serverSource).digest() == %r
+    __builtin__.pushy_source = serverSource
+    serverCode = marshal.loads(serverSource)
+    exec serverCode
+    pushy_server(stdin, stdout)
+except:
+    import traceback
+    # Uncomment for debugging
+    # traceback.print_exc(file=open("stderr.txt", "w"))
+    raise
 """.strip() % (len(serverSource), md5ServerSource)
 
 # Avoid putting any quote characters in the program at all costs.
@@ -397,7 +425,10 @@ class PushyClient:
             raise
 
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except:
+            pass
 
     def eval(self, code):
         return self.remote.eval(code)

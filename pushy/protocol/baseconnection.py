@@ -29,21 +29,30 @@ import pushy.util
 
 # This collection should contain only immutable types. Builtin, mutable types
 # such as list, set and dict need to be handled specially.
-marshallable_types = (
+marshallable_types = [
     unicode, slice, frozenset, float, basestring, long, str, int, complex,
-    bool, buffer, type(None)
-)
+    bool, type(None)
+]
+
+# The 'buffer' type doesn't exist in Jython.
+try:
+    marshallable_types.append(buffer)
+except NameError: pass
+
 
 # Message types that may received in response to a request.
 response_types = (
     MessageType.response, MessageType.exception
 )
+marshallable_types = tuple(marshallable_types)
 
 
 class LoggingFile:
     def __init__(self, stream, log):
         self.stream = stream
         self.log = log
+    def close(self):
+        self.stream.close()
     def write(self, s):
         self.log.write(s)
         self.stream.write(s)

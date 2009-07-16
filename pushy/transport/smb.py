@@ -131,6 +131,20 @@ else:
     GENERIC_WRITE             = 0x40000000
     OPEN_EXISTING             = 3
     INVALID_HANDLE_VALUE      = 2**32-1
+    FILE_FLAG_NO_BUFFERING    = 0x20000000
+    FILE_FLAG_WRITE_THROUGH   = 0x80000000
+    FILE_FLAG_OVERLAPPED      = 0x40000000
+    ERROR_IO_PENDING          = 997
+
+    # Structures
+    class overlapped_internal_struct(Structure):
+        _fields_ = [("Offset", DWORD), ("OffsetHigh", DWORD)]
+    class overlapped_internal_union(Union):
+        _fields_ = [("struct", overlapped_internal_struct),
+                    ("Pointer", c_void_p)]
+    class OVERLAPPED(Structure):
+        _fields_ = [("Internal", c_void_p), ("InternalHigh", c_void_p),
+                    ("union", overlapped_internal_union), ("hEvent", HANDLE)]
 
     # Win32 API Functions
     GetLastError = windll.kernel32.GetLastError
@@ -144,11 +158,22 @@ else:
 
     WriteFile = windll.kernel32.WriteFile
     WriteFile.restype = BOOL
-    WriteFile.argtypes = [HANDLE, c_void_p, DWORD, POINTER(DWORD), c_void_p]
+    WriteFile.argtypes = [
+        HANDLE, c_void_p, DWORD, POINTER(DWORD), POINTER(OVERLAPPED)]
 
     ReadFile = windll.kernel32.ReadFile
     ReadFile.restype = BOOL
-    ReadFile.argtypes = [HANDLE, c_void_p, DWORD, POINTER(DWORD), c_void_p]
+    ReadFile.argtypes = [
+        HANDLE, c_void_p, DWORD, POINTER(DWORD), POINTER(OVERLAPPED)]
+
+    CreateEvent = windll.kernel32.CreateEventA
+    CreateEvent.restype = HANDLE
+    CreateEvent.argtypes = [c_void_p, BOOL, BOOL, c_char_p]
+
+    GetOverlappedResult = windll.kernel32.GetOverlappedResult
+    GetOverlappedResult.restype = BOOL
+    GetOverlappedResult.argtypes = [
+        HANDLE, POINTER(OVERLAPPED), POINTER(DWORD), BOOL]
 
     CloseHandle = windll.kernel32.CloseHandle
     CloseHandle.restype = BOOL
@@ -171,15 +196,23 @@ else:
     GetUserNameExA.restype = BOOL
     GetUserNameExA.argtypes = [DWORD, c_char_p, POINTER(DWORD)]
 
+    FlushFileBuffers = windll.kernel32.FlushFileBuffers
+    FlushFileBuffers.restypes = BOOL
+    FlushFileBuffers.argtypes = [HANDLE]
+
+
     class Handle:
         "Class for closing underlying Win32 handle on deletion."
         def __init__(self, handle=HANDLE()):
             self.handle = handle
         def __del__(self):
-            if self.handle and not CloseHandle(self.handle):
-                raise Exception, "Failed to close handle"
-            def __repr__(self):
-                return "Handle(%d)" % int(self.handle.value)
+            self.close()
+        def close(self):
+            if self.handle:
+                value = CloseHandle(self.handle)
+                if not value:
+                    raise Exception, "Failed to close handle"
+            self.handle = None
 
 
     class Win32File(Handle):
@@ -187,40 +220,75 @@ else:
         Not sure why, but a simple open(pipe_path, "w+b") can't be shared for
         both stdin and stdout. Calling ReadFile/WriteFile directly, we can do
         this.
+
+        We must use overlapped I/O, since a read and write may occur on the
+        pipe at the same time. Without using overlapped I/O, one caller would
+        be blocked by the other.
         """
 
         def __init__(self, handle):
-            Handle.__init__(self, handle)
-            self.__fd = msvcrt.open_osfhandle(self.handle, 0)
-
-        def flush(self):
-            pass
+            Handle.__init__(self, HANDLE(handle))
+            self.__fd = msvcrt.open_osfhandle(self.handle.value, 0)
 
         def close(self):
-            del self.handle
+            Handle.close(self)
+
+        def flush(self):
+            FlushFileBuffers(self.handle)
 
         def fileno(self):
             return self.__fd
 
         def write(self, data):
-            while len(data) > 0:
+            buffer = create_string_buffer(data)
+            total_written = 0
+            while total_written < len(data):
                 written = DWORD(0)
-                if not WriteFile(self.handle, data, len(data),
-                                 byref(written), 0):
-                    raise IOError, GetLastError()
-                data = data[written.value:]
+                overlapped = OVERLAPPED()
+                overlapped.hEvent = CreateEvent(None, True, False, None)
+                try:
+                    # Cross-network pipes are limited to 65535 bytes at a time.
+                    n = len(data) - total_written
+                    if n > 65535:
+                        n = 65535
+
+                    if not WriteFile(self.handle,
+                                     addressof(buffer)+total_written, n,
+                                     byref(written), byref(overlapped)):
+                        error = GetLastError()
+                        if error != ERROR_IO_PENDING:
+                            raise IOError, error
+                        if not GetOverlappedResult(self.handle,
+                                                   byref(overlapped),
+                                                   byref(written), True):
+                            raise IOError, GetLastError()
+                finally:
+                    CloseHandle(overlapped.hEvent)
+                total_written += written.value
 
         def read(self, size):
             buffer = create_string_buffer(size)
             total_nread = 0
             while total_nread < size:
-                nread = DWORD(0)
-                if not ReadFile(self.handle,
-                                addressof(buffer)+total_nread,
-                                size-total_nread, byref(nread), 0):
-                    raise IOError, GetLastError()
-                total_nread += nread.value
-            return buffer.raw
+                overlapped = OVERLAPPED()
+                overlapped.hEvent = CreateEvent(None, True, False, None)
+                try:
+                    nread = DWORD(0)
+                    if not ReadFile(self.handle,
+                                    addressof(buffer)+total_nread,
+                                    size-total_nread, byref(nread),
+                                    byref(overlapped)):
+                        error = GetLastError()
+                        if error != ERROR_IO_PENDING:
+                            raise IOError, error
+                        if not GetOverlappedResult(self.handle,
+                                                   byref(overlapped),
+                                                   byref(nread), True):
+                            raise IOError, GetLastError()
+                    total_nread += nread.value
+                finally:
+                    CloseHandle(overlapped.hEvent)
+            return buffer.raw[:total_nread]
 
         def readlines(self):
             data = ""
@@ -279,15 +347,22 @@ else:
             # Determine current username/domain. If they're the same as the
             # one specified, don't bother authenticating.
             current_username = get_current_username_domain()
-            already_logged = (current_username == (domain, username))
+            if domain == "":
+                import platform
+                already_logged = \
+                    (current_username == (platform.node(), username))
+            else:
+                already_logged = (current_username == (domain, username))
 
             if already_logged or \
                logon(authenticate(username, password, domain)):
                 try:
-                    handle = CreateFile(r"\\%s\pipe\pushy" % hostname,
-                                        GENERIC_READ | GENERIC_WRITE,
-                                        0, 0, OPEN_EXISTING, 0, 0)
-
+                    flags = FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH |\
+                            FILE_FLAG_OVERLAPPED
+                    handle = \
+                        CreateFile(r"\\%s\pipe\pushy" % hostname,
+                                   GENERIC_READ | GENERIC_WRITE,
+                                   0, 0, OPEN_EXISTING, flags, 0)
                     if handle == INVALID_HANDLE_VALUE:
                         raise Exception, "Failed to open named pipe"
                     self.stdin = self.stdout = Win32File(handle)
@@ -306,6 +381,11 @@ class Popen(pushy.transport.BaseTransport, BasePopen):
         @param password: The password to authenticate with.
         @param domain: The domain to authenticate with.
         """
+
+        # If no domain is specified, and the domain is specified in the
+        # username, split it out.
+        if not domain and "\\" in username:
+            domain, username = username.split("\\")
 
         pushy.transport.BaseTransport.__init__(self, address)
         BasePopen.__init__(self, address, username, password, domain)

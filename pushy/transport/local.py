@@ -29,10 +29,13 @@ class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address)
 
-        command[0] = sys.executable
+        if not sys.platform.startswith("java"):
+            command[0] = sys.executable
+
         self.__proc = subprocess.Popen(command, stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
+                                       stderr=subprocess.PIPE,
+                                       bufsize=65535)
 
         self.stdout = self.__proc.stdout
         self.stderr = self.__proc.stderr
