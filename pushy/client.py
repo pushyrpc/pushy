@@ -272,6 +272,7 @@ if not hasattr(__builtin__, "pushy_source"):
     if "__loader__" in locals():
         if should_compile:
             serverSource = __loader__.get_code(__name__)
+            serverSource = marshal.dumps(serverSource)
         else:
             serverSource = __loader__.get_source(__name__)
             serverSource = marshal.dumps(serverSource)

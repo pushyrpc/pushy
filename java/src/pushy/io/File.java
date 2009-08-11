@@ -59,7 +59,10 @@ public class File extends java.io.File {
 
     public boolean delete() {
         if (exists()) {
-            osModule.remove(getPath());
+            if (isDirectory())
+                osModule.rmdir(getPath());
+            else
+                osModule.remove(getPath());
             return !exists();
         }
         return false;
