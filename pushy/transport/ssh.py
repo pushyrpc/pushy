@@ -30,6 +30,8 @@ import pushy.transport
 
 __all__ = ["ParamikoPopen", "NativePopen", "Popen"]
 
+is_windows = (sys.platform == "win32")
+
 class SafeSSHClient(paramiko.SSHClient):
     """
     Subclass of paramiko.SSHClient, which makes its Transport a daemon
@@ -118,7 +120,7 @@ if native_ssh is None:
         paths = os.environ["PATH"].split(os.pathsep)
 
     ssh_program = "ssh"
-    if sys.platform == "win32":
+    if is_windows:
         ssh_program = "plink.exe"
 
     for path in paths:
@@ -134,7 +136,7 @@ if native_ssh is not None:
         """
         An SSH transport for Pushy, which uses the native ssh or plink program.
         """
-        def __init__(self, command, address, username=None):
+        def __init__(self, command, address, username=None, password=None):
             """
             @param address: The hostname/address to connect to.
             @param username: The username to connect with.
@@ -146,7 +148,17 @@ if native_ssh is not None:
                 address = username + "@" + address
 
             command = ['"%s"' % word for word in command]
-            args = [native_ssh, address, " ".join(command)]
+            args = [native_ssh]
+
+            # Plink allows specification of password on the command-line. Not
+            # secure, as other processes may see others' command-line
+            # arguments. "use_native=False" should be specified if no password
+            # specified, and security is of great importance.
+            if password is not None:
+                assert ssh_program == "plink.exe"
+                args.extend(["-pw", password])
+
+            args.extend([address, " ".join(command)])
             self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
@@ -171,7 +183,7 @@ if native_ssh is not None:
 # Define Popen.
 
 if native_ssh is not None:
-    def Popen(command, use_native=True, password=None, *args, **kwargs):
+    def Popen(command, use_native=None, password=None, *args, **kwargs):
         """
         Selects between the native and Paramiko SSH transports, opting to use
         the native program where possible.
@@ -186,7 +198,12 @@ if native_ssh is not None:
                          used, except if L{use_native} is False.
         """
 
-        if use_native and password is None:
+        # Determine default value for "use_native", based on other parameters.
+        if use_native is None:
+            # On Windows, PuTTy is actually slower than Paramiko!
+            use_native = ((not is_windows) and (password is None))
+
+        if use_native:
             return NativePopen(command, *args, **kwargs)
         return ParamikoPopen(command, password=password, *args, **kwargs)
 else:
