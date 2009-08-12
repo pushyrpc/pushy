@@ -26,6 +26,16 @@
         <jar destfile="build/pushy.jar">
             <fileset dir="build/classes"/>
             <fileset dir="src/python"/>
+            <manifest>
+                <!-- Information about the program itself -->
+                <attribute name="Manifest-Version" value="1.0"/>
+                <attribute name="Bundle-ManifestVersion" value="2"/>
+                <attribute name="Bundle-Name" value="Pushy"/>
+                <attribute name="Bundle-SymbolicName" value="pushy"/>
+                <attribute name="Bundle-Version" value="0.3"/>
+                <attribute name="Export-Package"
+                           value="pushy, pushy.io, pushy.modules"/>
+            </manifest>
         </jar>
     </target>
 

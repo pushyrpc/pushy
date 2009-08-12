@@ -160,7 +160,8 @@ if native_ssh is not None:
         """
         An SSH transport for Pushy, which uses the native ssh or plink program.
         """
-        def __init__(self, command, address, username=None, password=None):
+        def __init__(self, command, address,
+                     username=None, password=None, **kwargs):
             """
             @param address: The hostname/address to connect to.
             @param username: The username to connect with.
