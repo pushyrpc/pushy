@@ -94,6 +94,9 @@ class Message:
             assert len(payload) == length
         else:
             payload = ""
+        pushy.util.logger.debug(
+            "Read %d, %r %r", len(data) + len(payload),
+            data + payload, (type, source, target, length))
         return Message(type, payload, target, source)
 
 ###############################################################################
