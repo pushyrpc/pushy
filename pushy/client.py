@@ -399,11 +399,15 @@ class PushyClient:
             rsys.stdout = sys.stdout
             rsys.stderr = sys.stderr
 
-            # Specify the filesystem interface'
+            # Specify the filesystem interface
             if hasattr(self.server, "fs"):
                 self.fs = self.server.fs
             else:
                 self.fs = modules_.os
+
+            # putfile/getfile
+            self.putfile = getattr(self.server, "putfile", self.__putfile)
+            self.getfile = getattr(self.server, "getfile", self.__getfile)
 
             self.remote  = remote
             """The L{connection<pushy.protocol.Connection>} for the remote
@@ -424,6 +428,32 @@ class PushyClient:
             self.remote = None
             self.serve_thread = None
             raise
+
+    def __putfile(self, local, remote):
+        f_read = open(local, "rb")
+        f_write = self.modules.__builtin__.open(remote, "wb")
+        try:
+            d = f_read.read(8192)
+            while len(d) > 0:
+                f_write.write(d)
+                d = f_read.read(8192)
+        finally:
+            f_write.close()
+            f_read.close()
+
+    def __getfile(self, remote, local):
+        f_read = self.modules.__builtin__.open(remote, "rb")
+        try:
+            f_write = open(local, "wb")
+            try:
+                d = f_read.read(8192)
+                while len(d) > 0:
+                    f_write.write(d)
+                    d = f_read.read(8192)
+            finally:
+                f_write.close()
+        finally:
+            f_read.close()
 
     def __del__(self):
         try:

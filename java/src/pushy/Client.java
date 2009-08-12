@@ -361,5 +361,15 @@ public class Client
         Object[] callArgs = new Object[]{""+id, args, kwargs};
         return execute("callobj", callArgs);
     }
+
+    public void putfile(String localFile, String remoteFile)
+    {
+        execute("putfile", new Object[]{localFile, remoteFile});
+    }
+
+    public void getfile(String remoteFile, String localFile)
+    {
+        execute("getfile", new Object[]{remoteFile, localFile});
+    }
 }
 
