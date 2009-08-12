@@ -27,6 +27,7 @@ Popen-like interface for executing commands on a remote host via SSH.
 
 import os, paramiko, sys
 import pushy.transport
+import pushy.util.askpass
 
 __all__ = ["ParamikoPopen", "NativePopen", "Popen"]
 
@@ -104,7 +105,7 @@ class ParamikoPopen(pushy.transport.BaseTransport):
 
 
 ###############################################################################
-# Native SSH. This is used when no password is specified.
+# Native SSH. Truly secure only when a password is not specified.
 
 native_ssh = os.environ.get("PUSHY_NATIVE_SSH", None)
 if native_ssh is not None:
@@ -127,6 +128,29 @@ if native_ssh is None:
         path = os.path.join(path, ssh_program)
         if os.path.exists(path):
             native_ssh = path
+            break
+
+native_scp = os.environ.get("PUSHY_NATIVE_SCP", None)
+if native_scp is not None:
+    if not os.path.exists(native_scp):
+        import warnings
+        warnings.warn(
+            "Ignoring non-existant PUSHY_NATIVE_SCP (%r)" % native_scp)
+        native_scp = None
+
+if native_scp is None:
+    paths = []
+    if "PATH" in os.environ:
+        paths = os.environ["PATH"].split(os.pathsep)
+
+    scp_program = "scp"
+    if is_windows:
+        scp_program = "pscp.exe"
+
+    for path in paths:
+        path = os.path.join(path, scp_program)
+        if os.path.exists(path):
+            native_scp = path
             break
 
 if native_ssh is not None:
@@ -159,12 +183,47 @@ if native_ssh is not None:
                 args.extend(["-pw", password])
 
             args.extend([address, " ".join(command)])
-            self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
-                                           stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE)
+            if is_windows or password is None:
+                self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
+                                               stdout=subprocess.PIPE,
+                                               stderr=subprocess.PIPE)
+            else:
+                self.__proc = pushy.util.askpass.Popen(args,
+                                                       stdin=subprocess.PIPE, 
+                                                       stdout=subprocess.PIPE,
+                                                       stderr=subprocess.PIPE)
             self.stdout = self.__proc.stdout
             self.stdin  = self.__proc.stdin
             self.stderr = self.__proc.stderr
+
+            # If we have native SCP, store the address and password for later
+            # use.
+            if native_scp:
+                self.__address = address
+                self.__password = password
+                self.putfile = self._putfile
+                self.getfile = self._getfile
+
+        def _putfile(self, src, dest):
+            "Copy local file 'src' to remote file 'dest'"
+            return self.scp(src, self.__address + ":" + dest)
+
+        def _getfile(self, src, dest):
+            "Copy remote file 'src' to local file 'dest'"
+            return self.scp(self.__address + ":" + src, dest)
+
+        def scp(self, src, dest):
+            args = [native_scp]
+            if scp_program == "pscp.exe" and self.__password is not None:
+                args.extends(["-pw", self.__password])
+            args.extend((src, dest))
+            if is_windows or self.__password is None:
+                proc = subprocess.Popen(args, stdin=subprocess.PIPE)
+            else:
+                proc = pushy.util.askpass.Popen(args, self.__password,
+                                                stdin=subprocess.PIPE)
+            proc.stdin.close()
+            return proc.wait()
 
         def __del__(self):
             self.close()
