@@ -128,5 +128,19 @@ public class File extends java.io.File {
     public boolean isAbsolute() {
         return osPathModule.isabs(getPath());
     }
+
+    /**
+     * Copy the remote file to a local file.
+     */
+    public void get(String localPath) {
+        client.getfile(getPath(), localPath);
+    }
+
+    /**
+     * Copy the local file to the remote file.
+     */
+    public void put(String localPath) {
+        client.putfile(localPath, getPath());
+    }
 }
 

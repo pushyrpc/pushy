@@ -189,6 +189,22 @@ class JPushyFunctions:
             import traceback
             raise Exception, traceback.format_exc()
 
+    def putfile(self, src, dest):
+        try:
+            assert self.__connection is not None
+            self.__connection.putfile(src, dest)
+        except:
+            import traceback
+            raise Exception, traceback.format_exc()
+
+    def getfile(self, src, dest):
+        try:
+            assert self.__connection is not None
+            self.__connection.getfile(src, dest)
+        except:
+            import traceback
+            raise Exception, traceback.format_exc()
+
 
 class JPushyXMLRPCRequestHandler(DocXMLRPCRequestHandler):
     "Subclass of DocXMLRPCRequestHandler, which ignores log messages."
