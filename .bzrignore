@@ -1,1 +1,6 @@
 java/build
+*.obj
+*.class
+*.log
+*.idb
+*.suo
