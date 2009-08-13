@@ -25,7 +25,7 @@
 Popen-like interface for executing commands on a remote host via SSH.
 """
 
-import os, paramiko, sys
+import os, sys
 import pushy.transport
 import pushy.util.askpass
 
@@ -33,75 +33,82 @@ __all__ = ["ParamikoPopen", "NativePopen", "Popen"]
 
 is_windows = (sys.platform == "win32")
 
-class SafeSSHClient(paramiko.SSHClient):
-    """
-    Subclass of paramiko.SSHClient, which makes its Transport a daemon
-    thread.
+try:
+    import paramiko
+except ImportError:
+    paramiko = None
 
-    This is required to stop paramiko from hanging Python when the program
-    is finished.
-    """
-
-    def __init__(self):
-        paramiko.SSHClient.__init__(self)
-        self.load_system_host_keys()
-        self.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-    def __setattr__(self, name, value):
-        if name == "_transport" and value:
-            value.setDaemon(True)
-        self.__dict__[name] = value
-
-class ParamikoPopen(pushy.transport.BaseTransport):
-    """
-    An SSH transport for Pushy, which uses Paramiko.
-    """
-
-    def __init__(self, command, address, **kwargs):
+if paramiko:
+    class SafeSSHClient(paramiko.SSHClient):
         """
-        @param kwargs: Any parameter that can be passed to
-                       U{paramiko.SSHClient.connect<http://www.lag.net/paramiko/docs/paramiko.SSHClient-class.html#connect>}.
-                         - port
-                         - username
-                         - password
-                         - pkey
-                         - key_filename
-                         - timeout
-                         - allow_agent
-                         - look_for_keys
+        Subclass of paramiko.SSHClient, which makes its Transport a daemon
+        thread.
+
+        This is required to stop paramiko from hanging Python when the program
+        is finished.
         """
 
-        pushy.transport.BaseTransport.__init__(self, address)
-        self.__client = SafeSSHClient()
+        def __init__(self):
+            paramiko.SSHClient.__init__(self)
+            self.load_system_host_keys()
+            self.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        connect_args = {"hostname": address}
-        for name in ("port", "username", "password", "pkey", "key_filename",
-                     "timeout", "allow_agent", "look_for_keys"):
-            if name in kwargs:
-                connect_args[name] = kwargs[name]
-        self.__client.connect(**connect_args)
+        def __setattr__(self, name, value):
+            if name == "_transport" and value:
+                value.setDaemon(True)
+            self.__dict__[name] = value
 
-        # Join arguments into a string
-        args = command
-        for i in range(len(args)):
-            if " " in args[i]:
-                args[i] = "'%s'" % args[i]
-        command = " ".join(args)
+    class ParamikoPopen(pushy.transport.BaseTransport):
+        """
+        An SSH transport for Pushy, which uses Paramiko.
+        """
 
-        stdin, stdout, stderr = self.__client.exec_command(command)
-        self.stdin  = stdin
-        self.stdout = stdout
-        self.stderr = stderr
-        self.fs = self.__client.open_sftp()
+        def __init__(self, command, address, **kwargs):
+            """
+            @param kwargs: Any parameter that can be passed to
+                           U{paramiko.SSHClient.connect<http://www.lag.net/paramiko/docs/paramiko.SSHClient-class.html#connect>}.
+                             - port
+                             - username
+                             - password
+                             - pkey
+                             - key_filename
+                             - timeout
+                             - allow_agent
+                             - look_for_keys
+            """
 
-    def __del__(self):
-        self.close()
+            pushy.transport.BaseTransport.__init__(self, address)
+            self.__client = SafeSSHClient()
 
-    def close(self):
-        self.stdin.close()
-        self.stdout.close()
-        self.stderr.close()
-        self.__client.close()
+            connect_args = {"hostname": address}
+            for name in ("port", "username", "password", "pkey",
+                         "key_filename", "timeout", "allow_agent",
+                         "look_for_keys"):
+                if name in kwargs:
+                    connect_args[name] = kwargs[name]
+            self.__client.connect(**connect_args)
+
+            # Join arguments into a string
+            args = command
+            for i in range(len(args)):
+                if " " in args[i]:
+                    args[i] = "'%s'" % args[i]
+            command = " ".join(args)
+
+            stdin, stdout, stderr = self.__client.exec_command(command)
+            self.stdin  = stdin
+            self.stdout = stdout
+            self.stderr = stderr
+            self.fs = self.__client.open_sftp()
+
+        def __del__(self):
+            self.close()
+
+        def close(self):
+            self.stdin.close()
+            self.stdout.close()
+            self.stderr.close()
+            self.__client.close()
 
 
 ###############################################################################
@@ -179,17 +186,17 @@ if native_ssh is not None:
             # secure, as other processes may see others' command-line
             # arguments. "use_native=False" should be specified if no password
             # specified, and security is of great importance.
-            if password is not None:
-                assert ssh_program == "plink.exe"
+            if password is not None and ssh_program == "plink.exe":
                 args.extend(["-pw", password])
 
             args.extend([address, " ".join(command)])
+
             if is_windows or password is None:
                 self.__proc = subprocess.Popen(args, stdin=subprocess.PIPE, 
                                                stdout=subprocess.PIPE,
                                                stderr=subprocess.PIPE)
             else:
-                self.__proc = pushy.util.askpass.Popen(args,
+                self.__proc = pushy.util.askpass.Popen(args, password,
                                                        stdin=subprocess.PIPE, 
                                                        stdout=subprocess.PIPE,
                                                        stderr=subprocess.PIPE)
@@ -261,11 +268,16 @@ if native_ssh is not None:
         # Determine default value for "use_native", based on other parameters.
         if use_native is None:
             # On Windows, PuTTy is actually slower than Paramiko!
-            use_native = ((not is_windows) and (password is None))
-
+            use_native = \
+                (not paramiko) or ((not is_windows) and (password is None))
         if use_native:
+            kwargs["password"] = password
             return NativePopen(command, *args, **kwargs)
+        assert paramiko is not None
         return ParamikoPopen(command, password=password, *args, **kwargs)
-else:
+elif paramiko:
     Popen = ParamikoPopen
+else:
+    import warnings
+    warnings.warn("No paramiko or native ssh transport")
 
