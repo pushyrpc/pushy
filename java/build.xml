@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 
-<project>
+<project default="jar">
     <target name="clean">
         <delete dir="build"/>
     </target>
@@ -18,6 +18,19 @@
     </target>
 
     <target name="jar" depends="compile">
+        <!-- Get the bzr revision number. -->
+        <exec executable="bzr" outputproperty="revno"
+              failifexecutionfails="false" errorproperty="">
+            <arg value="revno"/>
+        </exec>
+
+        <!-- If bzr failed, then set revno to 0. -->
+        <condition property="revno" value="0">
+            <not><isset property="revno"/></not>
+        </condition>
+
+        <echo message="Building pushy.jar for revision ${revno}"/>
+
         <copy todir="build/classes/pushy">
             <fileset dir="../pushy">
                 <include name="**/*.py"/>
@@ -32,7 +45,7 @@
                 <attribute name="Bundle-ManifestVersion" value="2"/>
                 <attribute name="Bundle-Name" value="Pushy"/>
                 <attribute name="Bundle-SymbolicName" value="pushy"/>
-                <attribute name="Bundle-Version" value="0.3"/>
+                <attribute name="Bundle-Version" value="0.3.${revno}"/>
                 <attribute name="Export-Package"
                            value="pushy, pushy.io, pushy.modules"/>
             </manifest>
