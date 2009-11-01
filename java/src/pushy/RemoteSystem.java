@@ -102,7 +102,7 @@ class RemoteSystemProperties extends java.util.Properties
         if (key.equals("os.arch"))
             return platformModule.machine();
         if (key.equals("os.version"))
-            return platformModule.release();
+            return getOsVersion();
         if (key.equals("file.separator"))
             return osModule.sep;
         if (key.equals("path.separator"))
@@ -127,7 +127,38 @@ class RemoteSystemProperties extends java.util.Properties
     private String getOsName()
     {
         String system = platformModule.system();
+        if (system.equals("Windows"))
+            return system + " " + platformModule.release();
         return system;
+    }
+
+    /**
+     * Get the os version, as it would be reported by Java.
+     */
+    public String getOsVersion()
+    {
+        String system = platformModule.system();
+        if (system.equals("Windows"))
+        {
+            String[] win32ver = platformModule.win32_ver();
+            String version = win32ver[1]; // Release/build version
+            String csd = win32ver[2]; // Corrective Service Deliverable (SP)
+
+            int dot = version.lastIndexOf('.');
+            String release = version.substring(0, dot);
+            String build = version.substring(dot+1);
+
+            if (csd.startsWith("SP"))
+                csd = "Service Pack " + csd.substring(2);
+            String osVersion = release + " build " + build;
+            if (csd.length() > 0)
+                osVersion += " " + csd;
+            return osVersion;
+        }
+        else
+        {
+            return platformModule.release();
+        }
     }
 }
 

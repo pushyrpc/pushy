@@ -57,6 +57,10 @@ public class PushyTypeFactory extends TypeFactoryImpl
         {
             return new PushyObjectParser(client);
         }
+        else if (localName.equals("bstring"))
+        {
+            return new BinaryStringParser(client);
+        }
         else
         {
             return super.getParser(config, context, puri, localName);

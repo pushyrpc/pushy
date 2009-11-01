@@ -42,7 +42,7 @@
     <target name="compile_tests" depends="jar">
         <mkdir dir="build/unittest-classes"/>
         <javac srcdir="unittest" destdir="build/unittest-classes"
-               source="1.4" target="1.4">
+               source="1.4" target="1.4" debug="true">
             <compilerarg value="-Xlint"/>
             <classpath>
                 <pathelement path="${classpath}"/>

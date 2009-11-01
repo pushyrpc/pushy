@@ -35,6 +35,7 @@ public class PlatformModule extends Module
     private PushyObject systemMethod;
     private PushyObject machineMethod;
     private PushyObject releaseMethod;
+    private PushyObject win32verMethod;
 
     public PlatformModule(Client client)
     {
@@ -43,6 +44,8 @@ public class PlatformModule extends Module
         systemMethod = __getmethod__("system");
         machineMethod = __getmethod__("machine");
         releaseMethod = __getmethod__("release");
+        if (__hasattr__("win32_ver"))
+            win32verMethod = __getmethod__("win32_ver");
     }
 
     public String platform()
@@ -63,6 +66,19 @@ public class PlatformModule extends Module
     public String release()
     {
         return (String)releaseMethod.__call__();
+    }
+
+    public String[] win32_ver()
+    {
+        if (win32verMethod != null)
+        {
+            Object[] objects = (Object[])win32verMethod.__call__();
+            String[] values = new String[objects.length];
+            for (int i = 0; i < objects.length; ++i)
+                values[i] = (String)objects[i];
+            return values;
+        }
+        throw new UnsupportedOperationException("win32_ver is not supported");
     }
 }
 

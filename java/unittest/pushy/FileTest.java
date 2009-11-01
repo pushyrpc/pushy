@@ -34,7 +34,7 @@ public class FileTest extends TestCase
     }
 
     /**
-     * Test push.io.File.getAbsolutePath().
+     * Test pushy.io.File.getAbsolutePath().
      */
     public void testFileGetAbsolutePath() {
         OsModule os = (OsModule)client.getModule("os");
@@ -42,12 +42,14 @@ public class FileTest extends TestCase
 
         File dir = tempfile.mkdtemp();
         assertTrue(dir.exists());
+        String cwd = client.getSystem().getProperty("user.dir");
         try {
             os.chdir(dir.getAbsolutePath());
             assertEquals(
                 dir.getAbsolutePath(),
                 new pushy.io.File(client, ".").getAbsolutePath());
         } finally {
+            os.chdir(cwd); // Go back to where you came from.
             dir.delete();
         }
     }

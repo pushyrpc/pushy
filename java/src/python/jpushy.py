@@ -23,7 +23,7 @@
 
 from DocXMLRPCServer import DocXMLRPCServer as XMLRPCServer
 from DocXMLRPCServer import DocXMLRPCRequestHandler
-import glob, os, sys, UserDict, xmlrpclib
+import base64, glob, os, sys, StringIO, UserDict, xmlrpclib
 
 
 def isdict(obj):
@@ -31,6 +31,14 @@ def isdict(obj):
         return True
     return isinstance(obj, UserDict.UserDict)
 
+
+class BinaryString(xmlrpclib.Binary):
+    "A wrapper class for binary strings."
+
+    def encode(self, out):
+        out.write("<value><bstring>\n")
+        base64.encode(StringIO.StringIO(self.data), out)
+        out.write("</bstring></value>\n")
 
 class JPushyObject:
     "A wrapper class for objects that can't be marshalled by XML-RPC server."
@@ -66,7 +74,7 @@ class JPushyObject:
 # Lists are mutable. Don't convert to Object[].
 del xmlrpclib.Marshaller.dispatch[list]
 # Add JPushyObject to WRAPPERS.
-xmlrpclib.WRAPPERS = xmlrpclib.WRAPPERS + (JPushyObject,)        
+xmlrpclib.WRAPPERS = xmlrpclib.WRAPPERS + (JPushyObject, BinaryString)        
 
 
 class JPushyFunctions:
@@ -80,6 +88,8 @@ class JPushyFunctions:
     def __wrap(self, value):
         if type(value) not in xmlrpclib.Marshaller.dispatch:
             value = JPushyObject(self.__object_pool, value)
+        elif type(value) is str:
+            return BinaryString(value)
         return value
 
     def __unwrap(self, args, kwargs):
