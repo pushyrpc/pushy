@@ -49,7 +49,10 @@ public class BinaryStringParser extends ByteArrayParser
             byte[] byteArrayResult = (byte[])result;
             try
             {
-                result = new String(byteArrayResult, "UTF-8");
+                // Convert the byte array to a string using the Latin 1
+                // character set, which is single-byte and contains the full
+                // range [0-255].
+                result = new String(byteArrayResult, "ISO-8859-1");
             }
             catch (java.io.UnsupportedEncodingException e)
             {
