@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.Map;
 
 public class OsModule extends Module {
+    private PushyObject chdirMethod;
+    private PushyObject getcwdMethod;
     private PushyObject killMethod;
     private PushyObject removeMethod;
     private PushyObject rmdirMethod;
@@ -41,23 +43,38 @@ public class OsModule extends Module {
     private PushyObject makedirsMethod;
     private PushyObject statMethod;
     private PushyObject listdirMethod;
-    private PushyMapObject environ;
+
+    public final String sep;
+    public final String pathsep;
+    public final String linesep;
+    public final Map environ;
 
     public OsModule(Client client) {
         super(client, "os");
         if (__hasattr__("kill"))
             killMethod = (PushyObject)__getattr__("kill");
+        chdirMethod = (PushyObject)__getattr__("chdir");
+        getcwdMethod = (PushyObject)__getattr__("getcwd");
         removeMethod = (PushyObject)__getattr__("remove");
         rmdirMethod = (PushyObject)__getattr__("rmdir");
         mkdirMethod = (PushyObject)__getattr__("mkdir");
         makedirsMethod = (PushyObject)__getattr__("makedirs");
         statMethod = (PushyObject)__getattr__("stat");
         listdirMethod = (PushyObject)__getattr__("listdir");
+
+        // Get module-level attributes.
+        sep = (String)__getattr__("sep");
+        pathsep = (String)__getattr__("pathsep");
+        linesep = (String)__getattr__("linesep");
         environ = new PushyMapObject((PushyObject)__getattr__("environ"));
     }
 
     public PushyObject stat(String path) {
         return (PushyObject)statMethod.__call__(new Object[]{path});
+    }
+
+    public String getcwd() {
+        return (String)getcwdMethod.__call__();
     }
 
     public void kill(int pid, int signal) {
@@ -90,8 +107,8 @@ public class OsModule extends Module {
         return (String[])files.toArray(new String[]{});
     }
 
-    public Map getenv() {
-        return environ;
+    public void chdir(String path) {
+        chdirMethod.__call__(new Object[]{path});
     }
 }
 

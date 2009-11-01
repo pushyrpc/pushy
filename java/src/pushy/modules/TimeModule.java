@@ -25,44 +25,21 @@
 
 package pushy.modules;
 
-import pushy.PushyObject;
 import pushy.Client;
+import pushy.PushyObject;
 import pushy.Module;
 
-public class PlatformModule extends Module
-{
-    private PushyObject platformMethod;
-    private PushyObject systemMethod;
-    private PushyObject machineMethod;
-    private PushyObject releaseMethod;
+public class TimeModule extends Module {
+    private PushyObject timeMethod;
 
-    public PlatformModule(Client client)
-    {
-        super(client, "platform");
-        platformMethod = __getmethod__("platform");
-        systemMethod = __getmethod__("system");
-        machineMethod = __getmethod__("machine");
-        releaseMethod = __getmethod__("release");
+    public TimeModule(Client client) {
+        super(client, "time");    
+        timeMethod = (PushyObject)__getattr__("time");
     }
 
-    public String platform()
-    {
-        return (String)platformMethod.__call__();
-    }
-
-    public String system()
-    {
-        return (String)systemMethod.__call__();
-    }
-
-    public String machine()
-    {
-        return (String)machineMethod.__call__();
-    }
-
-    public String release()
-    {
-        return (String)releaseMethod.__call__();
+    public float time() {
+        System.out.println(timeMethod.__call__());
+        return ((Float)timeMethod.__call__()).floatValue();
     }
 }
 

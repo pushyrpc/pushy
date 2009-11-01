@@ -39,11 +39,19 @@ import pushy.Module;
 public class FileReader extends java.io.InputStreamReader {
     private static Charset charset; 
     static {charset = Charset.forName("UTF-8");}
-    
+
+    public FileReader(File file) {
+        this(file.getClient(), file);
+    }
+
+    public FileReader(Client client, java.io.File file) {
+        this(client, file.getAbsolutePath());
+    }
+
     public FileReader(Client client, String path) {
         super(getInputStream(client, path), charset.newDecoder());
     }
-    
+
     private static InputStream getInputStream(Client client, String path) {
         Module builtin = client.getModule("__builtin__");
         PushyObject open = (PushyObject)builtin.__getattr__("open");

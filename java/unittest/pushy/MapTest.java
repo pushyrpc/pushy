@@ -26,7 +26,7 @@ public class MapTest extends TestCase
      */
     public void testUserDict() throws Exception {
         OsModule os = (OsModule)client.getModule("os");
-        Map environ = os.getenv();
+        Map environ = os.environ;
         assertTrue(environ.containsKey("PATH"));
     }
 }

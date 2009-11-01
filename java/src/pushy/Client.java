@@ -84,6 +84,7 @@ public class Client
     private XmlRpcClientConfigImpl config;
     private XmlRpcClient client;
     private Map modules = new HashMap();
+    private RemoteSystem system;
 
     /**
      * Create a Pushy connection, with the specified address.
@@ -362,14 +363,42 @@ public class Client
         return execute("callobj", callArgs);
     }
 
+    /**
+     * Copy a local file to the remote system, using a transport-specific
+     * mechanism for greater efficiency where available.
+     *
+     * @param localFile The path of the local file to copy from.
+     * @param remoteFile The path of the remote file to copy to.
+     */
     public void putfile(String localFile, String remoteFile)
     {
         execute("putfile", new Object[]{localFile, remoteFile});
     }
 
+    /**
+     * Copy a remote file to the local system, using a transport-specific
+     * mechanism for greater efficiency where available.
+     *
+     * @param remoteFile The path of the remote file to copy from.
+     * @param localFile The path of the local file to copy to.
+     */
     public void getfile(String remoteFile, String localFile)
     {
         execute("getfile", new Object[]{remoteFile, localFile});
+    }
+
+    /**
+     * Get an instance of RemoteSystem, which mimics java.lang.System.
+     */
+    public RemoteSystem getSystem()
+    {
+        if (system == null) {
+            synchronized (this) {
+                if (system == null)
+                    system = new RemoteSystem(this);
+            }
+        }
+        return system;
     }
 }
 

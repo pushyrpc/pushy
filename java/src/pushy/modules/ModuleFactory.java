@@ -37,6 +37,7 @@ public class ModuleFactory {
     private static Map classes = new HashMap(); 
 
     static {
+        classes.put("getpass", GetpassModule.class);
         classes.put("os", OsModule.class);
         classes.put("os.path", OsPathModule.class);
         classes.put("platform", PlatformModule.class);
@@ -45,6 +46,7 @@ public class ModuleFactory {
         classes.put("shutil", ShutilModule.class);
         classes.put("socket", SocketModule.class);
         classes.put("tempfile", TempfileModule.class);
+        classes.put("time", TimeModule.class);
     }
 
     public static Module createModule(Client client, String name) {

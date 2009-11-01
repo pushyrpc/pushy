@@ -25,31 +25,38 @@
 
 package pushy.io;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 
 import pushy.Client;
 import pushy.PushyObject;
-import pushy.Module;
 
 public class FileWriter extends java.io.OutputStreamWriter {
     private static Charset charset; 
     static {charset = Charset.forName("UTF-8");}
-    
-    public FileWriter(Client client, String path) {
-        super(getOutputStream(client, path), charset.newEncoder());
+
+    public FileWriter(File file) {
+        this(file, false);
     }
-    
-    private static OutputStream getOutputStream(Client client, String path) {
-        Module builtin = client.getModule("__builtin__");
-        PushyObject open = (PushyObject)builtin.__getattr__("open");
-        PushyObject file =
-            (PushyObject)open.__call__(new String[]{path, "w"});
-        return new FileOutputStream(file);
+
+    public FileWriter(File file, boolean append) {
+        this(file.getClient(), file, append);
+    }
+
+    public FileWriter(Client client, java.io.File file) {
+        this(client, file, false);
+    }
+
+    public FileWriter(Client client, java.io.File file, boolean append) {
+        this(client, file.getAbsolutePath(), append);
+    }
+
+    public FileWriter(Client client, String path) {
+        this(client, path, false);
+    }
+
+    public FileWriter(Client client, String path, boolean append) {
+        super(new FileOutputStream(client, path, append ? "a" : "w"),
+              charset.newEncoder());
     }
 }
 

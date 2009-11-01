@@ -32,6 +32,8 @@ import pushy.modules.OsModule;
 import pushy.modules.OsPathModule;
 
 public class File extends java.io.File {
+    public static final long serialVersionUID = 0L;
+
     private Client client;
     private OsModule osModule;
     private OsPathModule osPathModule;
@@ -57,6 +59,13 @@ public class File extends java.io.File {
         osPathModule = (OsPathModule)client.getModule("os.path");
     }
 
+    /**
+     * Return the pushy.Client associated with this File object.
+     */
+    public Client getClient() {
+        return client;
+    }
+
     public boolean delete() {
         if (exists()) {
             if (isDirectory())
@@ -73,7 +82,7 @@ public class File extends java.io.File {
     }
 
     public String getAbsolutePath() {
-        return super.getAbsolutePath().replace("\\", "/");
+        return osPathModule.abspath(getPath());
     }
 
     public String getCanonicalPath() throws IOException {

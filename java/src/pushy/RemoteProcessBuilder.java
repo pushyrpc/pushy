@@ -89,7 +89,7 @@ public class RemoteProcessBuilder
         if (environment == null)
         {
             environment = new HashMap();
-            environment.putAll(((OsModule)client.getModule("os")).getenv());
+            environment.putAll(((OsModule)client.getModule("os")).environ);
         }
         return environment;
     }

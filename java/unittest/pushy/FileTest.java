@@ -32,5 +32,71 @@ public class FileTest extends TestCase
         file.delete();
         assertFalse(file.exists());
     }
+
+    /**
+     * Test push.io.File.getAbsolutePath().
+     */
+    public void testFileGetAbsolutePath() {
+        OsModule os = (OsModule)client.getModule("os");
+        TempfileModule tempfile = (TempfileModule)client.getModule("tempfile");
+
+        File dir = tempfile.mkdtemp();
+        assertTrue(dir.exists());
+        try {
+            os.chdir(dir.getAbsolutePath());
+            assertEquals(
+                dir.getAbsolutePath(),
+                new pushy.io.File(client, ".").getAbsolutePath());
+        } finally {
+            dir.delete();
+        }
+    }
+
+    /**
+     * Test pushy.io.FileReader/Writer.
+     */
+    public void testFileReaderWriter() throws Exception {
+        TempfileModule tempfile = (TempfileModule)client.getModule("tempfile");
+        File dir = tempfile.mkdtemp();
+        assertTrue(dir.exists());
+        try {
+            File file = new pushy.io.File(client, dir, "test.txt");
+            pushy.io.FileWriter writer = new pushy.io.FileWriter(client, file);
+            try {
+                // Write to the file.
+                writer.write("abc");
+
+                // Close the writer, reopen and write something else. The file
+                // should've been truncated, as we didn't request the file to
+                // be opened in "append" mode.
+                writer.close();
+                writer = new pushy.io.FileWriter(client, file);
+                writer.write("def");
+
+                // Close the writer, reopen in append mode and write something
+                // else. Expect no truncation this time.
+                writer.close();
+                writer = new pushy.io.FileWriter(client, file, true);
+                writer.write("123");
+                writer.close();
+
+                // Check the contents of the file.
+                pushy.io.FileReader reader =
+                    new pushy.io.FileReader(client, file);
+                try {
+                    String line =
+                        new java.io.BufferedReader(reader).readLine();
+                    assertEquals("def123", line);
+                } finally {
+                    reader.close();
+                }
+            } finally {
+                writer.close();
+                file.delete();
+            }
+        } finally {
+            dir.delete();
+        }
+    }
 }
 

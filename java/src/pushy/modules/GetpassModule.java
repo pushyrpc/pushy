@@ -25,44 +25,20 @@
 
 package pushy.modules;
 
-import pushy.PushyObject;
 import pushy.Client;
+import pushy.PushyObject;
 import pushy.Module;
 
-public class PlatformModule extends Module
-{
-    private PushyObject platformMethod;
-    private PushyObject systemMethod;
-    private PushyObject machineMethod;
-    private PushyObject releaseMethod;
+public class GetpassModule extends Module {
+    private PushyObject getuserMethod;
 
-    public PlatformModule(Client client)
-    {
-        super(client, "platform");
-        platformMethod = __getmethod__("platform");
-        systemMethod = __getmethod__("system");
-        machineMethod = __getmethod__("machine");
-        releaseMethod = __getmethod__("release");
+    public GetpassModule(Client client) {
+        super(client, "getpass");
+        getuserMethod = (PushyObject)__getattr__("getuser");
     }
 
-    public String platform()
-    {
-        return (String)platformMethod.__call__();
-    }
-
-    public String system()
-    {
-        return (String)systemMethod.__call__();
-    }
-
-    public String machine()
-    {
-        return (String)machineMethod.__call__();
-    }
-
-    public String release()
-    {
-        return (String)releaseMethod.__call__();
+    public String getuser() {
+        return (String)getuserMethod.__call__();
     }
 }
 

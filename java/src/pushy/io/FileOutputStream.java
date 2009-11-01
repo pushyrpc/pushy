@@ -29,6 +29,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import pushy.Client;
+import pushy.Module;
 import pushy.PushyObject;
 
 public class FileOutputStream extends OutputStream {
@@ -36,12 +38,51 @@ public class FileOutputStream extends OutputStream {
     private PushyObject writeMethod;
     private PushyObject closeMethod;
     private PushyObject flushMethod;
-    
+
+    /**
+     * Create a FileOutputStream for a Pushy file-like object.
+     */
     public FileOutputStream(PushyObject file) {
         this.file = file;
         writeMethod = (PushyObject)file.__getattr__("write");
         closeMethod = (PushyObject)file.__getattr__("close");
         flushMethod = (PushyObject)file.__getattr__("flush");
+    }
+
+    public FileOutputStream(File file) {
+        this(file, false);
+    }
+
+    public FileOutputStream(File file, boolean append) {
+        this(file.getClient(), file, append);
+    }
+
+    public FileOutputStream(Client client, java.io.File file) {
+        this(client, file, false);
+    }
+
+    public FileOutputStream(Client client, java.io.File file, boolean append) {
+        this(client, file.getAbsolutePath(), append);
+    }
+
+    public FileOutputStream(Client client, String path) {
+        this(client, path, false);
+    }
+
+    public FileOutputStream(Client client, String path, boolean append) {
+        this(client, path, append ? "ab" : "wb");
+    }
+
+    public FileOutputStream(File file, String mode) {
+        this(file.getClient(), file, mode);
+    }
+
+    public FileOutputStream(Client client, java.io.File file, String mode) {
+        this(client, file.getAbsolutePath(), mode);
+    }
+
+    public FileOutputStream(Client client, String path, String mode) {
+        this(open(client, path, mode));
     }
 
     public void close() throws IOException {
@@ -64,6 +105,13 @@ public class FileOutputStream extends OutputStream {
 
     public void write(int b) throws IOException {
         write(new byte[]{(byte)b});
+    }
+
+    // Open a file in the remote interpreter.
+    private static PushyObject open(Client client, String path, String mode) {
+        Module builtin = client.getModule("__builtin__");
+        PushyObject open = (PushyObject)builtin.__getattr__("open");
+        return (PushyObject)open.__call__(new String[]{path, mode});
     }
 }
 

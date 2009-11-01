@@ -35,6 +35,7 @@ public class OsPathModule extends Module {
     private PushyObject isFileMethod;
     private PushyObject isAbsMethod;
     private PushyObject abspathMethod;
+    private PushyObject expanduserMethod;
 
     public OsPathModule(Client client) {
         super(client, "os.path");
@@ -43,6 +44,7 @@ public class OsPathModule extends Module {
         isFileMethod = (PushyObject)__getattr__("isfile");
         isAbsMethod = (PushyObject)__getattr__("isabs");
         abspathMethod = (PushyObject)__getattr__("abspath");
+        expanduserMethod = (PushyObject)__getattr__("expanduser");
     }
 
     public boolean exists(String path) {
@@ -67,6 +69,10 @@ public class OsPathModule extends Module {
 
     public String abspath(String path) {
         return (String)abspathMethod.__call__(new Object[]{path});
+    }
+
+    public String expanduser(String path) {
+        return (String)expanduserMethod.__call__(new Object[]{path});
     }
 }
 
