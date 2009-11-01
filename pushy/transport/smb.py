@@ -375,7 +375,7 @@ else:
 
 class Popen(pushy.transport.BaseTransport, BasePopen):
     def __init__(self, command, address, username=None, password=None,
-                 domain=""):
+                 domain="", **kwargs):
         """
         @param username: The username to authenticate with.
         @param password: The password to authenticate with.
@@ -384,7 +384,7 @@ class Popen(pushy.transport.BaseTransport, BasePopen):
 
         # If no domain is specified, and the domain is specified in the
         # username, split it out.
-        if not domain and "\\" in username:
+        if not domain and username and "\\" in username:
             domain, username = username.split("\\")
 
         pushy.transport.BaseTransport.__init__(self, address)
