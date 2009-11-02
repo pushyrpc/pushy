@@ -28,6 +28,8 @@ package pushy.io;
 import java.io.IOException;
 import java.io.InputStream;
 
+import pushy.Client;
+import pushy.Module;
 import pushy.PushyObject;
 
 public class FileInputStream extends InputStream {
@@ -39,6 +41,30 @@ public class FileInputStream extends InputStream {
         this.file = file;
         readMethod = (PushyObject)file.__getattr__("read");
         closeMethod = (PushyObject)file.__getattr__("close");
+    }
+
+    public FileInputStream(File file) {
+        this(file.getClient(), file);
+    }
+
+    public FileInputStream(Client client, java.io.File file) {
+        this(client, file.getAbsolutePath());
+    }
+
+    public FileInputStream(Client client, String path) {
+        this(client, path, "rb");
+    }
+
+    public FileInputStream(File file, String mode) {
+        this(file.getClient(), file, mode);
+    }
+
+    public FileInputStream(Client client, java.io.File file, String mode) {
+        this(client, file.getAbsolutePath(), mode);
+    }
+
+    public FileInputStream(Client client, String path, String mode) {
+        this(open(client, path, mode));
     }
 
     public int read() throws IOException {
@@ -65,6 +91,13 @@ public class FileInputStream extends InputStream {
 
     public int read(byte[] b) throws IOException {
         return read(b, 0, b.length);
+    }
+
+    // Open a file in the remote interpreter.
+    private static PushyObject open(Client client, String path, String mode) {
+        Module builtin = client.getModule("__builtin__");
+        PushyObject open = (PushyObject)builtin.__getattr__("open");
+        return (PushyObject)open.__call__(new String[]{path, mode});
     }
 }
 
