@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import os, subprocess, sys
+import os, shutil, subprocess, sys
 
 import pushy.transport
 
@@ -40,6 +40,12 @@ class Popen(pushy.transport.BaseTransport):
         self.stdout = self.__proc.stdout
         self.stderr = self.__proc.stderr
         self.stdin  = self.__proc.stdin
+
+    def getfile(self, src, dest):
+        shutil.copyfile(src, dest)
+
+    def putfile(self, src, dest):
+        shutil.copyfile(src, dest)
 
     def __del__(self):
         self.close()

@@ -38,6 +38,10 @@ public class File extends java.io.File {
     private OsModule osModule;
     private OsPathModule osPathModule;
 
+    public File(File parent, String child) {
+        this(parent.getClient(), parent, child);
+    }
+
     public File(Client client, String pathname) {
         super(pathname);
         this.client = client;

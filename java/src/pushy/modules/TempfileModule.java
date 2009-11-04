@@ -40,7 +40,7 @@ public class TempfileModule extends Module {
         mkdtemp = (PushyObject)__getattr__("mkdtemp");
     }
 
-    public File mkdtemp() {
+    public pushy.io.File mkdtemp() {
         String name = (String)mkdtemp.__call__();
         return new pushy.io.File(client, name);
     }

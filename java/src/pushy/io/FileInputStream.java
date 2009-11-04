@@ -85,7 +85,7 @@ public class FileInputStream extends InputStream {
         if (bytes.length() == 0)
             return -1;
         System.arraycopy(
-            bytes.getBytes("UTF-8"), 0, b, offset, bytes.length());
+            bytes.getBytes("ISO-8859-1"), 0, b, offset, bytes.length());
         return bytes.length();
     }
 
