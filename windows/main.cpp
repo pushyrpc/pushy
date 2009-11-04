@@ -169,10 +169,12 @@ int service_install()
     }
 
     // Create the service.
-    handleService = CreateService(handleManager, SERVICE_NAME, SERVICE_NAME,
-                                  SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS,
-                                  SERVICE_AUTO_START, SERVICE_ERROR_NORMAL,
-                                  service_path, NULL, NULL, NULL, NULL, NULL);
+    handleService =
+        CreateService(handleManager, SERVICE_NAME, SERVICE_NAME,
+                      SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS,
+                      SERVICE_AUTO_START, SERVICE_ERROR_NORMAL,
+                      service_path, NULL, NULL, NULL, NULL, NULL);
+
     if (handleService == NULL) 
     {
         std::cerr << "Cannot create service: "
@@ -187,11 +189,36 @@ int service_install()
     return 0;
 }
 
+void show_usage(const char *argv0)
+{
+    std::cerr << "Usage: " << argv0 << " [options]" << std::endl
+              << "  /shell:   Start the daemon in the shell" << std::endl
+              << "  /install: Install the daemon as a service" << std::endl;
+}
+
 int main(int argc, char* argv[])
 {
     if (argc > 1)
     {
-        if (strcmp(argv[1], "-shell") == 0)
+        char *value = argv[1];
+
+        // Parameters should start with '/' or '-'.
+        if (!(*value == '-' || *value == '/'))
+        {
+            std::cerr << "Unexpected parameter: " << value << std::endl
+                      << std::endl;
+            show_usage(argv[0]);
+            return 1;
+        }
+
+        // Skip past the first character.
+        value = value + 1;
+
+        if (*value == 'h' || *value == '?')
+        {
+            show_usage(argv[0]);
+        }
+        else if (strcmp(value, "shell") == 0)
         {
             while (!shutdown)
             {
@@ -212,7 +239,7 @@ int main(int argc, char* argv[])
                 }
             }
         }
-        else if (strcmp(argv[1], "-install") == 0)
+        else if (strcmp(value, "install") == 0)
         {
             return service_install();
         }

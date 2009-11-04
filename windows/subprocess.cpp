@@ -150,10 +150,10 @@ void ReadFromPipe(HANDLE pipe, HANDLE file)
 
     // Create an auto-close Handle for the file, so the child process' stdin
     // is closed when the pipe is closed.
-    Handle stdin_(file);
+    pushy::Handle stdin_(file);
 
     // Create a manual reset event.
-    Handle event(CreateEvent(NULL, TRUE, FALSE, NULL));
+    pushy::Handle event(CreateEvent(NULL, TRUE, FALSE, NULL));
 
     // While the file is open, write the buffer to the pipe using
     // overlapped I/O.
@@ -216,7 +216,7 @@ void ReadIntoPipe(HANDLE file, HANDLE pipe)
     char buf[4096];
 
     // Create a manual reset event.
-    Handle event(CreateEvent(NULL, TRUE, FALSE, NULL));
+    pushy::Handle event(CreateEvent(NULL, TRUE, FALSE, NULL));
 
     // While the file is open, write the buffer to the pipe using
     // overlapped I/O.
@@ -300,8 +300,8 @@ DWORD ExecuteSubprocess(std::vector<std::string> const& args, HANDLE pipe)
     HANDLE p2cwrite_ = INVALID_HANDLE_VALUE;
     if (!CreatePipe(&p2cread_, &p2cwrite_, NULL, 0))
         throw std::runtime_error("Failed to create p2c pipe");
-    Handle p2cread(p2cread_);
-    Handle p2cwrite(p2cwrite_);
+    pushy::Handle p2cread(p2cread_);
+    pushy::Handle p2cwrite(p2cwrite_);
 
     // Create a pipe for reading from the child process. We want to do
     // overlapped I/O reads from the child pipe, so we can't use CreatePipe.
@@ -310,17 +310,17 @@ DWORD ExecuteSubprocess(std::vector<std::string> const& args, HANDLE pipe)
     HANDLE c2pwrite_ = INVALID_HANDLE_VALUE;
     if (!CreateOverlappedPipe(&c2pread_, &c2pwrite_, NULL, 0))
         throw std::runtime_error("Failed to create c2p pipe");
-    Handle c2pread(c2pread_);
-    Handle c2pwrite(c2pwrite_);
+    pushy::Handle c2pread(c2pread_);
+    pushy::Handle c2pwrite(c2pwrite_);
 
     // Create a "null" file for setting the stderr handle to.
-    Handle nulfile(CreateFile("nul", GENERIC_WRITE, FILE_SHARE_WRITE, 0,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0));
+    pushy::Handle nulfile(CreateFile("nul", GENERIC_WRITE, FILE_SHARE_WRITE, 0,
+                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0));
 
     // Create inheritable versions of the files for stdin/stdout/stderr.
-    Handle hStdInput(MakeInheritable(p2cread));
-    Handle hStdOutput(MakeInheritable(c2pwrite));
-    Handle hStdError(MakeInheritable(nulfile));
+    pushy::Handle hStdInput(MakeInheritable(p2cread));
+    pushy::Handle hStdOutput(MakeInheritable(c2pwrite));
+    pushy::Handle hStdError(MakeInheritable(nulfile));
 
     // Set up the parameters for process creation.
     sa.nLength = sizeof(sa);
@@ -365,15 +365,15 @@ DWORD ExecuteSubprocess(std::vector<std::string> const& args, HANDLE pipe)
     hStdError.close();
 
     // Create Handle objects for the process and thread handles.
-    Handle hProcess(pinfo.hProcess);
-    Handle hThread(pinfo.hThread);
+    pushy::Handle hProcess(pinfo.hProcess);
+    pushy::Handle hThread(pinfo.hThread);
 
     try
     {
         // Create a thread for reading from the pipe into the process' stdin.
         HANDLE handles[] = {pipe, p2cwrite};
-        Handle thread(CreateThread(
-                   NULL, 0, ReadFromPipeThread, handles, 0, 0));
+        pushy::Handle
+            thread(CreateThread(NULL, 0, ReadFromPipeThread, handles, 0, 0));
 
         // Read from the child process' stdout into the pipe.
         ReadIntoPipe(c2pread, pipe);
