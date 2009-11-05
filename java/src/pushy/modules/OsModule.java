@@ -35,6 +35,7 @@ import java.util.Map;
 
 public class OsModule extends Module {
     private PushyObject chdirMethod;
+    private PushyObject chmodMethod;
     private PushyObject getcwdMethod;
     private PushyObject killMethod;
     private PushyObject removeMethod;
@@ -43,6 +44,7 @@ public class OsModule extends Module {
     private PushyObject makedirsMethod;
     private PushyObject statMethod;
     private PushyObject listdirMethod;
+    private PushyObject renameMethod;
 
     public final String sep;
     public final String pathsep;
@@ -54,6 +56,7 @@ public class OsModule extends Module {
         if (__hasattr__("kill"))
             killMethod = (PushyObject)__getattr__("kill");
         chdirMethod = (PushyObject)__getattr__("chdir");
+        chmodMethod = __getmethod__("chmod");
         getcwdMethod = (PushyObject)__getattr__("getcwd");
         removeMethod = (PushyObject)__getattr__("remove");
         rmdirMethod = (PushyObject)__getattr__("rmdir");
@@ -61,6 +64,7 @@ public class OsModule extends Module {
         makedirsMethod = (PushyObject)__getattr__("makedirs");
         statMethod = (PushyObject)__getattr__("stat");
         listdirMethod = (PushyObject)__getattr__("listdir");
+        renameMethod = __getmethod__("rename");
 
         // Get module-level attributes.
         sep = (String)__getattr__("sep");
@@ -109,6 +113,14 @@ public class OsModule extends Module {
 
     public void chdir(String path) {
         chdirMethod.__call__(new Object[]{path});
+    }
+
+    public void chmod(String path, int mode) {
+        chmodMethod.__call__(new Object[]{path, new Integer(mode)});
+    }
+
+    public void rename(String src, String dest) {
+        renameMethod.__call__(new Object[]{src, dest});
     }
 }
 
