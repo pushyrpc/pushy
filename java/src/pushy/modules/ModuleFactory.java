@@ -45,6 +45,7 @@ public class ModuleFactory {
         classes.put("signal", SignalModule.class);
         classes.put("shutil", ShutilModule.class);
         classes.put("socket", SocketModule.class);
+        classes.put("stat", StatModule.class);
         classes.put("tempfile", TempfileModule.class);
         classes.put("time", TimeModule.class);
     }

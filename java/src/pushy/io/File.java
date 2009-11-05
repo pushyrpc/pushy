@@ -30,6 +30,7 @@ import java.io.IOException;
 import pushy.Client;
 import pushy.modules.OsModule;
 import pushy.modules.OsPathModule;
+import pushy.modules.StatModule;
 
 public class File extends java.io.File {
     public static final long serialVersionUID = 0L;
@@ -37,6 +38,7 @@ public class File extends java.io.File {
     private Client client;
     private OsModule osModule;
     private OsPathModule osPathModule;
+    private StatModule statModule;
 
     public File(File parent, String child) {
         this(parent.getClient(), parent, child);
@@ -47,6 +49,7 @@ public class File extends java.io.File {
         this.client = client;
         osModule = (OsModule)client.getModule("os");
         osPathModule = (OsPathModule)client.getModule("os.path");
+        statModule = (StatModule)client.getModule("stat");
     }
 
     public File(Client client, String parent, String child) {
@@ -54,6 +57,7 @@ public class File extends java.io.File {
         this.client = client;
         osModule = (OsModule)client.getModule("os");
         osPathModule = (OsPathModule)client.getModule("os.path");
+        statModule = (StatModule)client.getModule("stat");
     }
 
     public File(Client client, java.io.File parent, String child) {
@@ -61,6 +65,7 @@ public class File extends java.io.File {
         this.client = client;
         osModule = (OsModule)client.getModule("os");
         osPathModule = (OsPathModule)client.getModule("os.path");
+        statModule = (StatModule)client.getModule("stat");
     }
 
     /**
@@ -73,16 +78,16 @@ public class File extends java.io.File {
     public boolean delete() {
         if (exists()) {
             if (isDirectory())
-                osModule.rmdir(getPath());
+                osModule.rmdir(getAbsolutePath());
             else
-                osModule.remove(getPath());
+                osModule.remove(getAbsolutePath());
             return !exists();
         }
         return false;
     }
 
     public boolean exists() {
-        return osPathModule.exists(getPath());
+        return osPathModule.exists(getAbsolutePath());
     }
 
     public String getAbsolutePath() {
@@ -106,16 +111,16 @@ public class File extends java.io.File {
     }
 
     public boolean isDirectory() {
-        return osPathModule.isdir(getPath());
+        return osPathModule.isdir(getAbsolutePath());
     }
 
     public boolean isFile() {
-        return osPathModule.isfile(getPath());
+        return osPathModule.isfile(getAbsolutePath());
     }
 
     public boolean mkdir() {
         if (!exists()) {
-            osModule.mkdir(getPath());
+            osModule.mkdir(getAbsolutePath());
             return exists();
         }
         return false;
@@ -123,37 +128,86 @@ public class File extends java.io.File {
 
     public boolean mkdirs() {
         if (!exists()) {
-            osModule.makedirs(getPath());
+            osModule.makedirs(getAbsolutePath());
             return exists();
         }
         return false;
     }
 
     public String[] list() {
-        return osModule.listdir(getPath());
+        return osModule.listdir(getAbsolutePath());
     }
 
     public long length() {
-        return ((Integer)osModule.stat(getPath()).__getattr__(
+        return ((Integer)osModule.stat(getAbsolutePath()).__getattr__(
                    "st_size")).intValue();
     }
 
     public boolean isAbsolute() {
-        return osPathModule.isabs(getPath());
+        return osPathModule.isabs(getAbsolutePath());
+    }
+
+    public boolean setExecutable(boolean executable) {
+        return setExecutable(executable, true);
+    }
+
+    public boolean setExecutable(boolean executable, boolean ownerOnly) {
+        int mask = statModule.S_IXUSR;
+        if (!ownerOnly)
+            mask = mask | statModule.S_IXGRP | statModule.S_IXOTH;
+
+        // Get the new mode.
+        int current_mode = getMode();
+        int new_mode = current_mode;
+        if (executable)
+            new_mode |= mask;
+        else
+            new_mode &= ~mask;
+
+        // If the mode has changed, set it on the remote file system.
+        if (new_mode != current_mode)
+        {
+            try
+            {
+                osModule.chmod(getAbsolutePath(), new_mode);
+            }
+            catch (Throwable e)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean renameTo(java.io.File to) {
+        try {
+            osModule.rename(getAbsolutePath(), to.getAbsolutePath());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
      * Copy the remote file to a local file.
      */
     public void get(String localPath) {
-        client.getfile(getPath(), localPath);
+        client.getfile(getAbsolutePath(), localPath);
     }
 
     /**
      * Copy the local file to the remote file.
      */
     public void put(String localPath) {
-        client.putfile(localPath, getPath());
+        client.putfile(localPath, getAbsolutePath());
+    }
+
+    /**
+     * Get the file's mode (permissions).
+     */
+    public int getMode() {
+        return ((Integer)osModule.stat(
+                   getAbsolutePath()).__getattr__("st_mode")).intValue();
     }
 }
 
