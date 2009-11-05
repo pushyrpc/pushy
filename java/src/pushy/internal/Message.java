@@ -95,13 +95,24 @@ public class Message
     public byte[] pack()
     {
         // 21 bytes for the header + the payload.
-        byte[] buffer = new byte[21 + payload.length];
-        buffer[0] = (byte)type.getCode();
-        packLong(buffer, 1, source);
-        packLong(buffer, 9, target);
-        packInteger(buffer, 17, payload.length);
-        System.arraycopy(payload, 0, buffer, 21, payload.length);
-        return buffer;
+        java.io.ByteArrayOutputStream stream =
+            new java.io.ByteArrayOutputStream(21 + payload.length);
+        try {
+            pack(stream);
+        } catch (java.io.IOException e) {}
+        return stream.toByteArray();
+    }
+
+    /**
+     * Pack a message into its network representation.
+     */
+    public void pack(java.io.OutputStream stream) throws java.io.IOException
+    {
+        stream.write((byte)type.getCode());
+        pack(stream, source);
+        pack(stream, target);
+        pack(stream, payload.length);
+        stream.write(payload, 0, payload.length);
     }
 
     /**
@@ -153,16 +164,17 @@ public class Message
     }
 
     // Utility method for packing a network-order "long" into a byte array.
-    private static void packLong(byte[] buf, int offset, long value)
+    private static void
+    pack(java.io.OutputStream stream, long value) throws java.io.IOException
     {
-        buf[offset]   = (byte)((value >> 56) & 0xFF);
-        buf[offset+1] = (byte)((value >> 48) & 0xFF);
-        buf[offset+2] = (byte)((value >> 40) & 0xFF);
-        buf[offset+3] = (byte)((value >> 32) & 0xFF);
-        buf[offset+4] = (byte)((value >> 24) & 0xFF);
-        buf[offset+5] = (byte)((value >> 16) & 0xFF);
-        buf[offset+6] = (byte)((value >> 8)  & 0xFF);
-        buf[offset+7] = (byte)((value)       & 0xFF);
+        stream.write((byte)((value >> 56) & 0xFF));
+        stream.write((byte)((value >> 48) & 0xFF));
+        stream.write((byte)((value >> 40) & 0xFF));
+        stream.write((byte)((value >> 32) & 0xFF));
+        stream.write((byte)((value >> 24) & 0xFF));
+        stream.write((byte)((value >> 16) & 0xFF));
+        stream.write((byte)((value >> 8) & 0xFF));
+        stream.write((byte)((value) & 0xFF));
     }
 
     // Utility method for unpacking a network-order "long" from a byte array.
@@ -175,12 +187,13 @@ public class Message
     }
 
     // Utility method for packing a network-order "int" into a byte array.
-    private static void packInteger(byte[] buf, int offset, int value)
+    private static void
+    pack(java.io.OutputStream stream, int value) throws java.io.IOException
     {
-        buf[offset]   = (byte)((value >> 24) & 0xFF);
-        buf[offset+1] = (byte)((value >> 16) & 0xFF);
-        buf[offset+2] = (byte)((value >> 8)  & 0xFF);
-        buf[offset+3] = (byte)((value)       & 0xFF);
+        stream.write((byte)((value >> 24) & 0xFF));
+        stream.write((byte)((value >> 16) & 0xFF));
+        stream.write((byte)((value >> 8) & 0xFF));
+        stream.write((byte)((value) & 0xFF));
     }
 
     // Utility method for unpacking a network-order "int" from a byte array.
@@ -252,7 +265,29 @@ public class Message
         }
 
         // Define message types.
-        public static final Type evaluate = createType("evaluate");
+        public static final Type evaluate       = createType("evaluate");
+        public static final Type response       = createType("response");
+        public static final Type exception      = createType("exception");
+        public static final Type getattr        = createType("getattr");
+        public static final Type setattr        = createType("setattr");
+        public static final Type getstr         = createType("getstr");
+        public static final Type getrepr        = createType("getrepr");
+        public static final Type op__call__     = createType("op__call__");
+        public static final Type op__cmp__      = createType("op__cmp__");
+        public static final Type op__hash__     = createType("op__hash__");
+        public static final Type op__len__      = createType("op__len__");
+        public static final Type op__getitem__  = createType("op__getitem__");
+        public static final Type op__setitem__  = createType("op__setitem__");
+        public static final Type op__delitem__  = createType("op__delitem__");
+        public static final Type op__contains__ = createType("op__contains__");
+
+        /**
+         * Check if a message type is a a response type.
+         */
+        public boolean isResponse()
+        {
+            return this.equals(response) || this.equals(exception);
+        }
     }
 }
 
