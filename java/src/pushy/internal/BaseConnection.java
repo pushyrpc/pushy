@@ -46,6 +46,8 @@ public class BaseConnection
     private int responseCount = 0;
     private Map responseHandlers = new HashMap();
     private List requests = new ArrayList();
+    private ThreadLocal threadRequestCount = new ThreadLocal();
+    private ThreadLocal peerThread = new ThreadLocal();
 
     protected BaseConnection(java.io.InputStream istream,
                              java.io.OutputStream ostream)
@@ -57,9 +59,71 @@ public class BaseConnection
     /**
      * Handle a request or response message.
      */
-    protected Object handle(Message message)
+    private Object handle(Message message) throws java.io.IOException
     {
-        return null; // TODO
+        // Track the number of requests being processed in this thread. May be
+        // greater than one, if there is to-and-fro. We need to track this so
+        // we know when to set the 'peerThread'.
+        boolean isRequest = !message.getType().isResponse();
+        if (isRequest)
+        {
+            int threadRequestCount = getThreadRequestCount();
+            setThreadRequestCount(threadRequestCount + 1);
+            if (threadRequestCount == 0)
+                setPeerThread(message.getSource());
+        }
+
+        try
+        {
+            Object value = unmarshal(message.getPayload());
+            Object result = handle(message.getType(), value);
+            if (isRequest)
+                sendResponse(result);
+            return result;
+        }
+        catch (RuntimeException e)
+        {
+            // An exception raised while handling an exception message
+            // should be sent up to the caller.
+            if (message.getType().equals(Message.Type.exception))
+                throw e;
+
+            // Allow the message receiving thread to proceed.
+            synchronized (processingCondition)
+            {
+                if (--processingCount == 0)
+                    processingCondition.notifyAll();
+            }
+
+            sendMessage(Message.Type.exception, e);
+            return null;
+        }
+        finally
+        {
+            if (isRequest)
+            {
+                int threadRequestCount = getThreadRequestCount();
+                setThreadRequestCount(threadRequestCount - 1);
+                if (threadRequestCount == 1)
+                    setPeerThread(0);
+            }
+        }
+    }
+
+    protected Object handle(Message.Type type, Object arg)
+    {
+        if (type.equals(Message.Type.response))
+        {
+            return arg;
+        }
+        else if (type.equals(Message.Type.exception))
+        {
+            if (arg instanceof RuntimeException)
+                throw (RuntimeException)arg;
+            else
+                throw new RemoteException(arg);
+        }
+        return null;
     }
 
     /**
@@ -160,7 +224,37 @@ public class BaseConnection
      */
     private long getPeerThread()
     {
-        return -1; // TODO
+        Long peer = (Long)peerThread.get();
+        if (peer == null)
+            return 0;
+        return peer.longValue();
+    }
+
+    /**
+     * Set the current thread's peer thread.
+     */
+    private void setPeerThread(long peer)
+    {
+        peerThread.set(new Long(peer));
+    }
+
+    /**
+     * Get the current thread's request count.
+     */
+    private int getThreadRequestCount()
+    {
+        Integer count = (Integer)threadRequestCount.get();
+        if (count == null)
+            return 0;
+        return count.intValue();
+    }
+
+    /**
+     * Set the current thread's request count.
+     */
+    private void setThreadRequestCount(int count)
+    {
+        threadRequestCount.set(new Integer(count));
     }
 
     /**
@@ -247,11 +341,88 @@ public class BaseConnection
      * Wait for a response message, or a request message in response to the
      * initial request.
      */
-    private Message getResponse(ResponseHandler handler)
+    private Message
+    getResponse(ResponseHandler handler) throws java.io.IOException
     {
         synchronized (processingCondition)
         {
-            return null; // TODO
+            // Wait until we're allowed to read from the input stream, or
+            // another thread has enqueued a request for us.
+            while ((open && handler.getMessage() == null) &&
+                   (receiving ||
+                    (processingCount > 0 &&
+                     (processingCount > waitingCount))))
+            {
+                processingCondition.notify();
+                try
+                {
+                    processingCondition.wait();
+                }
+                catch (InterruptedException e)
+                {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            // If we don't have a message yet, then we'll need to release the
+            // lock and then receive a message.
+            if (open)
+            {
+                if (handler.getMessage() == null)
+                {
+                    receiving = true;
+                }
+                else
+                {
+                    --responseCount;
+                }
+            }
+        }
+
+        // Receive a message.
+        if (open && handler.getMessage() == null)
+        {
+            Message message = getMessage();
+            if (message.getTarget() == 0)
+            {
+                requests.add(message);
+            }
+            else
+            {
+                ResponseHandler targetResponseHandler =
+                    (ResponseHandler)responseHandlers.get(
+                        new Long(message.getTarget()));
+                targetResponseHandler.setMessage(message);
+                if (message.getTarget() != handler.getThreadId())
+                    ++responseCount;
+            }
+        }
+
+        // Stopped receiving: acquire the lock again, and update the state.
+        synchronized (processingCondition)
+        {
+            receiving = false;
+            try
+            {
+                Message message = handler.getMessage();
+                if (message != null)
+                {
+                    if (!message.getType().isResponse())
+                        ++processingCount;
+                    else if (getThreadRequestCount() > 0)
+                        --waitingCount;
+                }
+                else if (!open)
+                {
+                    throw new RuntimeException("Connection is closed");
+                }
+                return message;
+            }
+            finally
+            {
+                handler.setMessage(null);
+                processingCondition.notifyAll();
+            }
         }
     }
 
@@ -266,12 +437,12 @@ public class BaseConnection
         }
     }
 
-    private int getThreadRequestCount()
+    private byte[] marshal(Object value)
     {
-        return -1; // TODO
+        return null; // TODO
     }
 
-    private byte[] marshal(Object value)
+    private Object unmarshal(byte[] bytes)
     {
         return null; // TODO
     }

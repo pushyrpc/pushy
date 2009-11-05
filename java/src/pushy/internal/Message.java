@@ -264,7 +264,8 @@ public class Message
             return type;
         }
 
-        // Define message types.
+        // Define message types: must be in the same order as in the Python
+        // code.
         public static final Type evaluate       = createType("evaluate");
         public static final Type response       = createType("response");
         public static final Type exception      = createType("exception");
@@ -273,12 +274,22 @@ public class Message
         public static final Type getstr         = createType("getstr");
         public static final Type getrepr        = createType("getrepr");
         public static final Type op__call__     = createType("op__call__");
+        public static final Type op__lt__       = createType("op__lt__");
+        public static final Type op__le__       = createType("op__le__");
+        public static final Type op__eq__       = createType("op__eq__");
+        public static final Type op__ne__       = createType("op__ne__");
+        public static final Type op__gt__       = createType("op__gt__");
+        public static final Type op__ge__       = createType("op__ge__");
         public static final Type op__cmp__      = createType("op__cmp__");
+        public static final Type op__rcmp__     = createType("op__rcmp__");
         public static final Type op__hash__     = createType("op__hash__");
+        public static final Type op__nonzero__  = createType("op__nonzero__");
+        public static final Type op__unicode__  = createType("op__unicode__");
         public static final Type op__len__      = createType("op__len__");
         public static final Type op__getitem__  = createType("op__getitem__");
         public static final Type op__setitem__  = createType("op__setitem__");
         public static final Type op__delitem__  = createType("op__delitem__");
+        public static final Type op__iter__     = createType("op__iter__");
         public static final Type op__contains__ = createType("op__contains__");
 
         /**
