@@ -45,6 +45,9 @@ public class Marshal
     private static int version = 0;
 
     // Constants used by getLong.
+    private static int LONG_SHIFT = 15;
+    private static int LONG_BASE  = (1 << LONG_SHIFT);
+    private static int LONG_MASK  = (LONG_BASE-1);
     private static BigInteger BIG_INT_MIN =
         new BigInteger("" + Integer.MIN_VALUE);
     private static BigInteger BIG_INT_MAX =
@@ -127,18 +130,30 @@ public class Marshal
     dump(Object object, OutputStream stream)
         throws IOException, MarshalException
     {
+        if (object instanceof Short)
+        {
+            stream.write(Type.INT);
+            putInt32(stream, ((Short)object).shortValue());
+        }
         if (object instanceof Integer)
         {
             stream.write(Type.INT);
-            
+            putInt32(stream, ((Integer)object).intValue());
         }
         else if (object instanceof Long)
         {
             stream.write(Type.INT64);
+            putInt64(stream, ((Long)object).longValue());
         }
         else if (object instanceof BigInteger)
         {
             stream.write(Type.LONG);
+            putLong(stream, (BigInteger)object);
+        }
+        else
+        {
+            throw new MarshalException(
+                          "unsupported type: " + object.getClass());
         }
     }
 
@@ -184,6 +199,15 @@ public class Marshal
     }
 
     /**
+     * Write a 8-bit integer (byte).
+     */
+    private static void
+    putInt8(OutputStream stream, byte value) throws IOException
+    {
+        stream.write(value);
+    }
+
+    /**
      * Get a little-endian 16-bit integer.
      */
     private static short getInt16(InputStream stream) throws IOException
@@ -197,8 +221,8 @@ public class Marshal
     private static void
     putInt16(OutputStream stream, short value) throws IOException
     {
-        stream.write(value & 0xFF);
-        stream.write((value >> 8) & 0xFF);
+        putInt8(stream, (byte)value);
+        putInt8(stream, (byte)(value >> 8));
     }
 
     /**
@@ -206,8 +230,11 @@ public class Marshal
      */
     private static int getInt32(InputStream stream) throws IOException
     {
-        return (stream.read())       | (stream.read() << 8) |
-               (stream.read() << 16) | (stream.read() << 24);
+        int b0 = stream.read();
+        int b1 = stream.read();
+        int b2 = stream.read();
+        int b3 = stream.read();
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
     }
 
     /**
@@ -216,10 +243,10 @@ public class Marshal
     private static void
     putInt32(OutputStream stream, int value) throws IOException
     {
-        stream.write((byte)(value & 0xFF));
-        stream.write((byte)((value >> 8) & 0xFF));
-        stream.write((byte)((value >> 16) & 0xFF));
-        stream.write((byte)((value >> 24) & 0xFF));
+        putInt8(stream, (byte)value);
+        putInt8(stream, (byte)(value >> 8));
+        putInt8(stream, (byte)(value >> 16));
+        putInt8(stream, (byte)(value >> 24));
     }
 
     /**
@@ -243,7 +270,7 @@ public class Marshal
     }
 
     /**
-     * Arbitrary-precision integer.
+     * Get an arbitrary-precision integer.
      * @return A Integer, Long, or BigInteger.
      */
     private static Number getLong(InputStream stream) throws IOException
@@ -254,11 +281,13 @@ public class Marshal
 
         // Calculate the absolute value of the integer.
         BigInteger bigint = new BigInteger("0");
+        short[] digits = new short[ndigits];
+        for (int i = 0; i < ndigits; ++i)
+            digits[i] = getInt16(stream);
         for (int i = 0; i < ndigits; ++i)
         {
-            int digit = getInt16(stream);
-            bigint.shiftLeft(15);
-            bigint.add(new BigInteger("" + digit));
+            bigint = bigint.shiftLeft(LONG_SHIFT);
+            bigint = bigint.add(new BigInteger("" + digits[ndigits-i-1]));
         }
 
         // Negate, if necessary. The sign is conveyed in the size (ndigits).
@@ -283,7 +312,7 @@ public class Marshal
             cmp = bigint.compareTo(BIG_INT_MIN);
             if (cmp < 0)
             {
-                cmp = bigint.compareTo(BIG_LONG_MAX);
+                cmp = bigint.compareTo(BIG_LONG_MIN);
                 if (cmp < 0)
                     return bigint;
                 return new Long(bigint.longValue());
@@ -292,6 +321,34 @@ public class Marshal
             {
                 return new Integer(bigint.intValue());
             }
+        }
+    }
+
+    /**
+     * Write an arbitrary-precision integer.
+     */
+    private static void
+    putLong(OutputStream stream, BigInteger bigint) throws IOException
+    {
+        int ndigits = 0;
+        boolean negative = bigint.compareTo(BigInteger.ZERO) < 0;
+        if (negative)
+            bigint = bigint.abs();
+
+        // Count the number of digits.
+        BigInteger t = new BigInteger(bigint.toString());
+        for (; !t.equals(BigInteger.ZERO); ++ndigits)
+            t = t.shiftRight(LONG_SHIFT);
+
+        // Write the size.
+        putInt32(stream, negative ? -ndigits : ndigits);
+
+        // Write the digits.
+        t = new BigInteger(bigint.toString());
+        for (int i = 0; i < ndigits; ++i)
+        {
+            putInt16(stream, (short)(t.shortValue() & LONG_MASK));
+            t = t.shiftRight(LONG_SHIFT);
         }
     }
 }
