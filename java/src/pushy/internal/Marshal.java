@@ -130,6 +130,12 @@ public class Marshal
     dump(Object object, OutputStream stream)
         throws IOException, MarshalException
     {
+        if (object == null)
+        {
+            stream.write(Type.NONE);
+            return;
+        }
+
         if (object instanceof Short)
         {
             stream.write(Type.INT);
@@ -149,6 +155,18 @@ public class Marshal
         {
             stream.write(Type.LONG);
             putLong(stream, (BigInteger)object);
+        }
+        else if (object instanceof Boolean)
+        {
+            if (object.equals(Boolean.TRUE))
+                stream.write(Type.TRUE);
+            else
+                stream.write(Type.FALSE);
+        }
+        else if (object instanceof String)
+        {
+            stream.write(Type.STRING);
+            putString(stream, (String)object);
         }
         else
         {
@@ -193,8 +211,28 @@ public class Marshal
             case Type.STOPITER:
                 throw new MarshalException("unsupported type: " + type);
 
+            // String types.
+            case Type.STRING:
+            case Type.INTERNED:
+                return getString(stream);
+            case Type.UNICODE:
+                return getString(stream, "UTF-8");
+
+            // TODO
+            case Type.FLOAT:
+            case Type.BINARY_FLOAT:
+            case Type.COMPLEX:
+            case Type.BINARY_COMPLEX:
+            case Type.STRINGREF:
+            case Type.TUPLE:
+            case Type.DICT:
+            case Type.CODE:
+            case Type.UNKNOWN:
+            case Type.SET:
+            case Type.FROZENSET:
+
             default:
-                throw new MarshalException("bad marshal data");
+                throw new MarshalException("bad marshal data: " + (char)type);
         }
     }
 
@@ -276,6 +314,9 @@ public class Marshal
     private static Number getLong(InputStream stream) throws IOException
     {
         int ndigits = getInt32(stream);
+        if (ndigits == 0)
+            return new Integer(0);
+
         boolean negative = ndigits < 0;
         ndigits = Math.abs(ndigits);
 
@@ -350,6 +391,47 @@ public class Marshal
             putInt16(stream, (short)(t.shortValue() & LONG_MASK));
             t = t.shiftRight(LONG_SHIFT);
         }
+    }
+
+    /**
+     * Read a string.
+     */
+    private static String getString(InputStream stream) throws IOException
+    {
+        return getString(stream, "ISO-8859-1"); // LATIN-1
+    }
+
+    /**
+     * Read a string with the specified character set.
+     */
+    private static String
+    getString(InputStream stream, String charset) throws IOException
+    {
+        int size = getInt32(stream);
+        if (size == 0)
+            return "";
+
+        byte[] buf = new byte[size];
+        int nread = 0;
+        do
+        {
+            int partial = stream.read(buf, nread, buf.length-nread);
+            if (partial == -1)
+                throw new java.io.EOFException();
+            nread += partial;
+        } while (nread < buf.length);
+        return new String(buf, charset);
+    }
+
+    /**
+     * Write a string.
+     */
+    private static void
+    putString(OutputStream stream, String string) throws IOException
+    {
+        putInt32(stream, string.length());
+        byte[] bytes = string.getBytes("ISO-8859-1");
+        stream.write(bytes);
     }
 }
 
