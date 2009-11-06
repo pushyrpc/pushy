@@ -32,6 +32,8 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import java.lang.reflect.Array;
+
 import java.math.BigInteger;
 
 import java.util.HashMap;
@@ -101,7 +103,19 @@ public class Marshal
      */
     public static boolean isMarshallable(Object object)
     {
-        return object == null || isMarshallableType(object.getClass());
+        if (object == null || isMarshallableType(object.getClass()))
+        {
+            return true;
+        }
+        else if (object.getClass().isArray())
+        {
+            boolean all = true;
+            for (int i = 0; all && i < Array.getLength(object); ++i)
+                if (!isMarshallable(Array.get(object, i)))
+                    all = false;
+            return all;
+        }
+        return false;
     }
 
     /**
@@ -154,12 +168,30 @@ public class Marshal
     dump(Object object, OutputStream stream)
         throws IOException, MarshalException
     {
+        // Handle null values.
         if (object == null)
         {
             stream.write(Type.NONE);
             return;
         }
 
+        // Handle arrays.
+        if (object.getClass().isArray())
+        {
+            // XXX
+            // Herein lies a conundrum. If we say it's a tuple, then Python
+            // thinks it can't modify any elements. If we say it's a list, then
+            // the other side thinks it can modify the list structure. For now,
+            // prefer the former.
+            int size = Array.getLength(object);
+            stream.write(Type.TUPLE);
+            putInt32(stream, size);
+            for (int i = 0; i < size; ++i)
+                dump(Array.get(object, i), stream);
+            return;
+        }
+
+        // Handle all other types.
         Handler handler = (Handler)handlers.get(object.getClass());
         if (handler != null)
         {
@@ -185,6 +217,17 @@ public class Marshal
         if (type == Type.NULL || type == Type.NONE)
             return null;
 
+        // Load a tuple: size followed by size*objects.
+        if (type == Type.TUPLE)
+        {
+            int size = getInt32(stream);
+            java.util.List items = new java.util.ArrayList();
+            for (int i = 0; i < size; ++i)
+                items.add(load(stream));
+            return createArray(items);
+        }
+
+        // Handle all other type codes.
         Class class_ = (Class)types.get(new Integer(type));
         if (class_ == null)
             throw new MarshalException("unsupported type: " + (char)type);
@@ -387,6 +430,53 @@ public class Marshal
         putInt32(stream, string.length());
         byte[] bytes = string.getBytes("ISO-8859-1");
         stream.write(bytes);
+    }
+
+    private static Map primitiveTypes = new HashMap();
+    static
+    {
+        primitiveTypes.put(Boolean.class,   Boolean.TYPE);
+        primitiveTypes.put(Byte.class,      Byte.TYPE);
+        primitiveTypes.put(Character.class, Character.TYPE);
+        primitiveTypes.put(Double.class,    Double.TYPE);
+        primitiveTypes.put(Float.class,     Float.TYPE);
+        primitiveTypes.put(Integer.class,   Integer.TYPE);
+        primitiveTypes.put(Long.class,      Long.TYPE);
+        primitiveTypes.put(Short.class,     Short.TYPE);
+    }
+
+    /**
+     * Convert an object list to an array of the most specific, primitive
+     * array.
+     */
+    public static Object createArray(java.util.List list)
+    {
+        // Convert to a type-specific array if all elements are of the
+        // same type, otherwise just return an Object array.
+        if (list.isEmpty())
+            return new Object[]{};
+
+        java.util.Iterator iter = list.iterator();
+        Class compType = iter.next().getClass();
+        while (iter.hasNext() && !compType.equals(Object.class))
+            if (!iter.next().getClass().equals(compType))
+                compType = Object.class;
+
+        if (compType.equals(Object.class))
+            return list.toArray(new Object[]{});
+
+        // If the type is an Object type corresponding to primitive
+        // type (e.g. Integer), get the primitive type.
+        Class primitiveType = (Class)primitiveTypes.get(compType);
+        if (primitiveType != null)
+            compType = primitiveType;
+
+        // Create the array.
+        Object array = Array.newInstance(compType, list.size());
+        iter = list.iterator();
+        for (int i = 0; iter.hasNext(); ++i)
+            Array.set(array, i, iter.next());
+        return array;
     }
 
     // Define type handlers and type mappings.

@@ -477,10 +477,9 @@ public class BaseConnection
         // Marshal array in the same way as Python tuples.
         if (value.getClass().isArray())
         {
-            boolean allMarshallable = true;
             int length = Array.getLength(value);
             stream.write('t');
-            for (int i = 0; allMarshallable && i < length; ++i)
+            for (int i = 0; i < length; ++i)
                 marshal(Array.get(value, i), stream);
         }
         // TODO
@@ -512,6 +511,7 @@ public class BaseConnection
             }
             case 'p': // Remote proxy object.
             {
+                Object id = Marshal.load(stream);
             }
             default:
                 logger.severe("Unhandled type: " + (char)type);
@@ -528,51 +528,7 @@ public class BaseConnection
             byte[] bytes = readBytes(stream, size);
             items.add(unmarshal(bytes));
         }
-
-        // Convert to a type-specific array if all elements are of the
-        // same type, otherwise just return an Object array.
-        if (!items.isEmpty())
-        {
-            Iterator iter = items.iterator();
-            Class compType = iter.next().getClass();
-            while (iter.hasNext() && !compType.equals(Object.class))
-                if (!iter.next().getClass().equals(compType))
-                    compType = Object.class;
-
-            if (!compType.equals(Object.class))
-                return narrowArray(items, compType);
-            return items.toArray(new Object[]{});
-        }
-        return new Object[]{};
-    }
-
-    private static Map primitiveTypes = new HashMap();
-    static
-    {
-        primitiveTypes.put(Boolean.class,   Boolean.TYPE);
-        primitiveTypes.put(Byte.class,      Byte.TYPE);
-        primitiveTypes.put(Character.class, Character.TYPE);
-        primitiveTypes.put(Double.class,    Double.TYPE);
-        primitiveTypes.put(Float.class,     Float.TYPE);
-        primitiveTypes.put(Integer.class,   Integer.TYPE);
-        primitiveTypes.put(Long.class,      Long.TYPE);
-        primitiveTypes.put(Short.class,     Short.TYPE);
-    }
-
-    private Object narrowArray(List list, Class type) throws IOException
-    {
-        // If the type is an Object type corresponding to primitive type 
-        // (e.g. Integer), get the primitive type.
-        Class primitiveType = (Class)primitiveTypes.get(type);
-        if (primitiveType != null)
-            type = primitiveType;
-
-        // Create the array.
-        Object array = Array.newInstance(type, list.size());
-        Iterator iter = list.iterator();
-        for (int i = 0; iter.hasNext(); ++i)
-            Array.set(array, i, iter.next());
-        return array;
+        return Marshal.createArray(items);
     }
 
     private int getInt32(InputStream stream) throws IOException

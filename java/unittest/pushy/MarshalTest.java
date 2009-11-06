@@ -2,6 +2,7 @@ package pushy;
 
 import junit.framework.TestCase;
 
+import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -16,7 +17,27 @@ public class MarshalTest extends TestCase
     // to the input.
     private void assertMarshalIdentity(Object value) throws Exception
     {
-        assertEquals(value, Marshal.load(Marshal.dump(value)));
+        Object unmarshalled = Marshal.load(Marshal.dump(value));
+        if (value == null)
+        {
+            assertNull(unmarshalled);
+        }
+        else
+        {
+            if (value.getClass().isArray())
+            {
+                int length = Array.getLength(value);
+                assertEquals(length, Array.getLength(unmarshalled));
+                for (int i = 0; i < length; ++i)
+                {
+                    assertEquals("Element " + i + "doesn't match",
+                                 Array.get(value, i),
+                                 Array.get(unmarshalled, i));
+                }
+            }
+            else
+                assertEquals(value, unmarshalled);
+        }
     }
 
     // Assert that two byte arrays are equal.
@@ -118,6 +139,12 @@ public class MarshalTest extends TestCase
         assertBytesEqual(new byte[]{'F'}, Marshal.dump(Boolean.FALSE));
         assertMarshalIdentity(Boolean.TRUE);
         assertMarshalIdentity(Boolean.FALSE);
+    }
+
+    public void testMarshalArray() throws Exception
+    {
+        assertMarshalIdentity(new Object[]{});
+        assertMarshalIdentity(new int[]{1,2,3});
     }
 }
 
