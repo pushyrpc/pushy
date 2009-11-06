@@ -25,6 +25,8 @@
 
 package pushy.internal;
 
+import pushy.PushyObject;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -121,7 +123,7 @@ public class BaseConnection
             if (arg instanceof RuntimeException)
                 throw (RuntimeException)arg;
             else
-                throw new RemoteException(arg);
+                throw new RemoteException((PushyObject)arg);
         }
         return null;
     }
@@ -150,7 +152,7 @@ public class BaseConnection
      * Send a request to the peer, and wait for and return the result.
      */
     protected Object
-    sendRequest(Message.Type type, Object[] args) throws java.io.IOException
+    sendRequest(Message.Type type, Object arg) throws java.io.IOException
     {
         ResponseHandler handler = new ResponseHandler();
 
@@ -171,7 +173,7 @@ public class BaseConnection
         }
 
         // Send the message.
-        sendMessage(type, args);
+        sendMessage(type, arg);
 
         // Wait for the response handler to be signalled.
         Message m = null;

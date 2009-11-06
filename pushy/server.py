@@ -76,15 +76,19 @@ def run(port = DEFAULT_PORT):
     Start a socket server, which creates Pushy connections as client
     connections come in.
 
-    @param port: The port number to listen on.
+    @param port: The port number to listen on, or "stdio" to use standard I/O.
     """
 
-    server = pushy_server(port)
-    while True:
-        asyncore.loop()
+    if port == "stdio":
+        serve_forever(sys.stdin, sys.stdout)
+    else:
+        server = pushy_server(int(port))
+        while True:
+            asyncore.loop()
+
 
 if __name__ == "__main__":
-    import pushy.util, logging
+    import pushy.util, logging, sys
     pushy.util.logger.addHandler(logging.StreamHandler())
-    run()
+    run(*sys.argv[1:])
 
