@@ -76,6 +76,12 @@ public class Message
         return payload;
     }
 
+    public String toString()
+    {
+        return "Message(" + type + ", " + getSource() + ", " +
+                getTarget() + ", " + payload.length + " bytes)";
+    }
+
     public boolean equals(Object rhs)
     {
         if (rhs instanceof Message)

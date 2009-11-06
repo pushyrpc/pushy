@@ -25,7 +25,7 @@
 
 package pushy.internal;
 
-public class MarshalException extends Exception
+public class MarshalException extends RuntimeException
 {
     MarshalException(String message)
     {

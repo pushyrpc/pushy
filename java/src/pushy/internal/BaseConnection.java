@@ -27,10 +27,19 @@ package pushy.internal;
 
 import pushy.PushyObject;
 
+import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Base class for Pushy connections, defining generic protocol and message
@@ -38,6 +47,9 @@ import java.util.Map;
  */
 public class BaseConnection
 {
+    private static final Logger logger =
+        Logger.getLogger(BaseConnection.class.getName());
+
     private java.io.InputStream istream;
     private java.io.OutputStream ostream;
     private Object processingCondition = new Object();
@@ -48,6 +60,7 @@ public class BaseConnection
     private int responseCount = 0;
     private Map responseHandlers = new HashMap();
     private List requests = new ArrayList();
+    private Map proxiedObjects = new HashMap();
     private ThreadLocal threadRequestCount = new ThreadLocal();
     private ThreadLocal peerThread = new ThreadLocal();
 
@@ -61,7 +74,7 @@ public class BaseConnection
     /**
      * Handle a request or response message.
      */
-    private Object handle(Message message) throws java.io.IOException
+    private Object handle(Message message) throws IOException
     {
         // Track the number of requests being processed in this thread. May be
         // greater than one, if there is to-and-fro. We need to track this so
@@ -114,6 +127,10 @@ public class BaseConnection
 
     protected Object handle(Message.Type type, Object arg)
     {
+        logger.log(
+            Level.FINE, "Handling message: type={0}, arg={1}",
+            new Object[]{type, arg});
+
         if (type.equals(Message.Type.response))
         {
             return arg;
@@ -152,7 +169,7 @@ public class BaseConnection
      * Send a request to the peer, and wait for and return the result.
      */
     protected Object
-    sendRequest(Message.Type type, Object arg) throws java.io.IOException
+    sendRequest(Message.Type type, Object arg) throws IOException
     {
         ResponseHandler handler = new ResponseHandler();
 
@@ -197,7 +214,7 @@ public class BaseConnection
     /**
      * Send a message as a response to a request.
      */
-    protected void sendResponse(Object result) throws java.io.IOException
+    protected void sendResponse(Object result) throws IOException
     {
         synchronized (processingCondition)
         {
@@ -211,12 +228,13 @@ public class BaseConnection
      * Send a message.
      */
     private void
-    sendMessage(Message.Type type, Object value) throws java.io.IOException
+    sendMessage(Message.Type type, Object value) throws IOException
     {
-        Message message = new Message(type, marshal(value), getPeerThread());
+        Message msg = new Message(type, marshal(value), getPeerThread());
         synchronized (ostream)
         {
-            message.pack(ostream);
+            logger.log(Level.INFO, "Sending message: {0}", new Object[]{msg});
+            msg.pack(ostream);
             ostream.flush();
         }
     }
@@ -262,7 +280,7 @@ public class BaseConnection
     /**
      * Wait for a request message.
      */
-    private Message getRequest() throws java.io.IOException
+    private Message getRequest() throws IOException
     {
         synchronized (processingCondition)
         {
@@ -344,7 +362,7 @@ public class BaseConnection
      * initial request.
      */
     private Message
-    getResponse(ResponseHandler handler) throws java.io.IOException
+    getResponse(ResponseHandler handler) throws IOException
     {
         synchronized (processingCondition)
         {
@@ -431,7 +449,7 @@ public class BaseConnection
     /**
      * Receive a message from the input stream.
      */
-    private Message getMessage() throws java.io.IOException
+    private Message getMessage() throws IOException
     {
         synchronized (istream)
         {
@@ -439,14 +457,147 @@ public class BaseConnection
         }
     }
 
-    private byte[] marshal(Object value)
+    private byte[] marshal(Object value) throws IOException
     {
-        return null; // TODO
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        marshal(value, stream);
+        return stream.toByteArray();
     }
 
-    private Object unmarshal(byte[] bytes)
+    private void marshal(Object value, OutputStream stream) throws IOException
     {
-        return null; // TODO
+        // Simple type?
+        if (Marshal.isMarshallable(value))
+        {
+            stream.write('s');
+            Marshal.dump(value, stream);
+            return;
+        }
+
+        // Marshal array in the same way as Python tuples.
+        if (value.getClass().isArray())
+        {
+            boolean allMarshallable = true;
+            int length = Array.getLength(value);
+            stream.write('t');
+            for (int i = 0; allMarshallable && i < length; ++i)
+                marshal(Array.get(value, i), stream);
+        }
+        // TODO
+    }
+
+    private Object unmarshal(byte[] bytes) throws IOException
+    {
+        InputStream stream = new ByteArrayInputStream(bytes);
+        return unmarshal(stream);
+    }
+
+    private Object unmarshal(InputStream stream) throws IOException
+    {
+        int type = stream.read();
+        switch (type)
+        {
+            case 's': // Simple marshallable type
+            {
+                return Marshal.load(stream);
+            }
+            case 't': // Tuple
+            {
+                return unmarshalArray(stream);
+            }
+            case 'o': // Proxy object that originated here.
+            {
+                Integer id = (Integer)Marshal.load(stream);
+                return proxiedObjects.get(id);
+            }
+            case 'p': // Remote proxy object.
+            {
+            }
+            default:
+                logger.severe("Unhandled type: " + (char)type);
+        }
+        return null;
+    }
+
+    private Object unmarshalArray(InputStream stream) throws IOException
+    {
+        List items = new ArrayList();
+        while (stream.available() > 0)
+        {
+            int size = getInt32(stream);
+            byte[] bytes = readBytes(stream, size);
+            items.add(unmarshal(bytes));
+        }
+
+        // Convert to a type-specific array if all elements are of the
+        // same type, otherwise just return an Object array.
+        if (!items.isEmpty())
+        {
+            Iterator iter = items.iterator();
+            Class compType = iter.next().getClass();
+            while (iter.hasNext() && !compType.equals(Object.class))
+                if (!iter.next().getClass().equals(compType))
+                    compType = Object.class;
+
+            if (!compType.equals(Object.class))
+                return narrowArray(items, compType);
+            return items.toArray(new Object[]{});
+        }
+        return new Object[]{};
+    }
+
+    private static Map primitiveTypes = new HashMap();
+    static
+    {
+        primitiveTypes.put(Boolean.class,   Boolean.TYPE);
+        primitiveTypes.put(Byte.class,      Byte.TYPE);
+        primitiveTypes.put(Character.class, Character.TYPE);
+        primitiveTypes.put(Double.class,    Double.TYPE);
+        primitiveTypes.put(Float.class,     Float.TYPE);
+        primitiveTypes.put(Integer.class,   Integer.TYPE);
+        primitiveTypes.put(Long.class,      Long.TYPE);
+        primitiveTypes.put(Short.class,     Short.TYPE);
+    }
+
+    private Object narrowArray(List list, Class type) throws IOException
+    {
+        // If the type is an Object type corresponding to primitive type 
+        // (e.g. Integer), get the primitive type.
+        Class primitiveType = (Class)primitiveTypes.get(type);
+        if (primitiveType != null)
+            type = primitiveType;
+
+        // Create the array.
+        Object array = Array.newInstance(type, list.size());
+        Iterator iter = list.iterator();
+        for (int i = 0; iter.hasNext(); ++i)
+            Array.set(array, i, iter.next());
+        return array;
+    }
+
+    private int getInt32(InputStream stream) throws IOException
+    {
+        return ((stream.read() << 24) | (stream.read() << 16) |
+                (stream.read() << 8)  | (stream.read()));
+    }
+
+    private byte[] readBytes(InputStream stream, int size) throws IOException
+    {
+        byte[] bytes = new byte[size];
+        readBytes(stream, bytes);
+        return bytes;
+    }
+
+    private void readBytes(InputStream stream, byte[] buf) throws IOException
+    {
+        int nread = 0;
+        do
+        {
+            int partial = stream.read(buf, nread, buf.length-nread);
+            if (partial == -1)
+                throw new java.io.EOFException();
+            nread += partial;
+        } while (nread < buf.length);
     }
 
     // A class that holds the result of a request.

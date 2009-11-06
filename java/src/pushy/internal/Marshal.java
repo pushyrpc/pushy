@@ -34,6 +34,9 @@ import java.io.OutputStream;
 
 import java.math.BigInteger;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * A class for marshaling to/from the Python marshal format.
  */
@@ -56,6 +59,11 @@ public class Marshal
         new BigInteger("" + Long.MIN_VALUE);
     private static BigInteger BIG_LONG_MAX =
         new BigInteger("" + Long.MAX_VALUE);
+
+    // Handlers (class -> handler)
+    private static Map handlers = new HashMap();
+    // Types (type code -> class)
+    private static Map types = new HashMap();
 
     /**
      * Object types.
@@ -87,6 +95,22 @@ public class Marshal
         private static final byte SET            = '<';
         private static final byte FROZENSET      = '>';
     };
+
+    /**
+     * Check if an object can be marshaled.
+     */
+    public static boolean isMarshallable(Object object)
+    {
+        return object == null || isMarshallableType(object.getClass());
+    }
+
+    /**
+     * Check if instances of the specified class can be marshalled.
+     */
+    public static boolean isMarshallableType(Class class_)
+    {
+        return handlers.containsKey(class_);
+    }
 
     /**
      * Marshal an object, and return the byte array.
@@ -136,37 +160,10 @@ public class Marshal
             return;
         }
 
-        if (object instanceof Short)
+        Handler handler = (Handler)handlers.get(object.getClass());
+        if (handler != null)
         {
-            stream.write(Type.INT);
-            putInt32(stream, ((Short)object).shortValue());
-        }
-        if (object instanceof Integer)
-        {
-            stream.write(Type.INT);
-            putInt32(stream, ((Integer)object).intValue());
-        }
-        else if (object instanceof Long)
-        {
-            stream.write(Type.INT64);
-            putInt64(stream, ((Long)object).longValue());
-        }
-        else if (object instanceof BigInteger)
-        {
-            stream.write(Type.LONG);
-            putLong(stream, (BigInteger)object);
-        }
-        else if (object instanceof Boolean)
-        {
-            if (object.equals(Boolean.TRUE))
-                stream.write(Type.TRUE);
-            else
-                stream.write(Type.FALSE);
-        }
-        else if (object instanceof String)
-        {
-            stream.write(Type.STRING);
-            putString(stream, (String)object);
+            handler.dump(stream, object);
         }
         else
         {
@@ -185,55 +182,13 @@ public class Marshal
         if (type == -1)
             throw new EOFException();
 
-        switch (type)
-        {
-            // Null/None types.
-            case Type.NULL:
-            case Type.NONE:
-                return null;
+        if (type == Type.NULL || type == Type.NONE)
+            return null;
 
-            // Boolean types.
-            case Type.FALSE:
-                return Boolean.FALSE;
-            case Type.TRUE:
-                return Boolean.TRUE;
-
-            // Integer types.
-            case Type.INT:
-                return new Integer(getInt32(stream));
-            case Type.INT64:
-                return new Long(getInt64(stream));
-            case Type.LONG:
-                return getLong(stream);
-
-            // Unsupported types.
-            case Type.ELLIPSIS:
-            case Type.STOPITER:
-                throw new MarshalException("unsupported type: " + type);
-
-            // String types.
-            case Type.STRING:
-            case Type.INTERNED:
-                return getString(stream);
-            case Type.UNICODE:
-                return getString(stream, "UTF-8");
-
-            // TODO
-            case Type.FLOAT:
-            case Type.BINARY_FLOAT:
-            case Type.COMPLEX:
-            case Type.BINARY_COMPLEX:
-            case Type.STRINGREF:
-            case Type.TUPLE:
-            case Type.DICT:
-            case Type.CODE:
-            case Type.UNKNOWN:
-            case Type.SET:
-            case Type.FROZENSET:
-
-            default:
-                throw new MarshalException("bad marshal data: " + (char)type);
-        }
+        Class class_ = (Class)types.get(new Integer(type));
+        if (class_ == null)
+            throw new MarshalException("unsupported type: " + (char)type);
+        return ((Handler)handlers.get(class_)).load(stream, type);
     }
 
     /**
@@ -432,6 +387,114 @@ public class Marshal
         putInt32(stream, string.length());
         byte[] bytes = string.getBytes("ISO-8859-1");
         stream.write(bytes);
+    }
+
+    // Define type handlers and type mappings.
+    static
+    {
+        handlers.put(Short.class,      new ShortHandler());
+        handlers.put(Integer.class,    new IntegerHandler());
+        handlers.put(Long.class,       new LongHandler());
+        handlers.put(BigInteger.class, new BigIntegerHandler());
+        handlers.put(String.class,     new StringHandler());
+        handlers.put(Boolean.class,    new BooleanHandler());
+
+        types.put(new Integer(Type.INT),      Integer.class);
+        types.put(new Integer(Type.INT64),    Long.class);
+        types.put(new Integer(Type.LONG),     BigInteger.class);
+        types.put(new Integer(Type.STRING),   String.class);
+        types.put(new Integer(Type.INTERNED), String.class);
+        types.put(new Integer(Type.UNICODE),  String.class);
+        types.put(new Integer(Type.TRUE),     Boolean.class);
+        types.put(new Integer(Type.FALSE),    Boolean.class);
+    }
+
+    /**
+     * Defines an interface for a type handler.
+     */
+    private static interface Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException;
+        public Object load(InputStream stream, int type) throws IOException;
+    }
+
+    private static class IntegerHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(Type.INT);
+            putInt32(stream, ((Integer)value).intValue());
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            return new Integer(getInt32(stream));
+        }
+    }
+
+    private static class ShortHandler extends IntegerHandler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            super.dump(stream, new Integer(((Short)value).shortValue()));
+        }
+    }
+
+    private static class LongHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(Type.INT64);
+            putInt64(stream, ((Long)value).longValue());
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            return new Long(getInt64(stream));
+        }
+    }
+
+    private static class BigIntegerHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(Type.LONG);
+            putLong(stream, (BigInteger)value);
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            return getLong(stream);
+        }
+    }
+
+    private static class BooleanHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(value.equals(Boolean.TRUE) ? Type.TRUE : Type.FALSE);
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            return type == Type.TRUE ? Boolean.TRUE : Boolean.FALSE;
+        }
+    }
+
+    private static class StringHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(Type.STRING);
+            putString(stream, (String)value);
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            if (type == Type.UNICODE)
+                return getString(stream, "UTF-8");
+            return getString(stream);
+        }
     }
 }
 
