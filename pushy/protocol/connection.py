@@ -81,10 +81,10 @@ class Connection(BaseConnection):
     def __handle_getrepr(self, type, object):
         return repr(object)
 
-    def __handle_evaluate(self, type, expression):
+    def __handle_evaluate(self, type_, expression):
         return eval(expression)
 
-    def __handle_call(self, type, args_):
+    def __handle_call(self, type_, args_):
         (object, args, kwargs) = args_
 
         # Copy the *args and **kwargs. In particular, the **kwargs dict

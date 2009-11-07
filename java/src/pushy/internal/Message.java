@@ -203,6 +203,8 @@ public class Message
         int b1 = stream.read();
         int b2 = stream.read();
         int b3 = stream.read();
+        if (b0 == -1 || b1 == -1 || b2 == -1 || b3 == -1)
+            throw new java.io.EOFException();
         return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
     }
 
@@ -260,6 +262,11 @@ public class Message
             return (Type)types.get(code);
         }
 
+        public static List getTypes()
+        {
+            return java.util.Collections.unmodifiableList(types);
+        }
+
         // Method for defining a type, given a name. The type's code
         // will be the next index into the 'types' list.
         private static Type createType(String name)
@@ -296,6 +303,68 @@ public class Message
         public static final Type op__delitem__  = createType("op__delitem__");
         public static final Type op__iter__     = createType("op__iter__");
         public static final Type op__contains__ = createType("op__contains__");
+        public static final Type op__get__      = createType("op__get__");
+        public static final Type op__set__      = createType("op__set__");
+        public static final Type op__delete__   = createType("op__delete__");
+        public static final Type op__getslice__ = createType("op__getslice__");
+        public static final Type op__setslice__ = createType("op__setslice__");
+        public static final Type op__delslice__ = createType("op__delslice__");
+        public static final Type op__add__      = createType("op__add__");
+        public static final Type op__sub__      = createType("op__sub__");
+        public static final Type op__mul__      = createType("op__mul__");
+        public static final Type op__floordiv__ = createType("op__floordiv__");
+        public static final Type op__mod__      = createType("op__mod__");
+        public static final Type op__divmod__   = createType("op__divmod__");
+        public static final Type op__pow__      = createType("op__pow__");
+        public static final Type op__lshift__   = createType("op__lshift__");
+        public static final Type op__rshift__   = createType("op__rshift__");
+        public static final Type op__and__      = createType("op__and__");
+        public static final Type op__xor__      = createType("op__xor__");
+        public static final Type op__or__       = createType("op__or__");
+        public static final Type op__div__      = createType("op__div__");
+        public static final Type op__truediv__  = createType("op__truediv__");
+        public static final Type op__radd__     = createType("op__radd__");
+        public static final Type op__rsub__     = createType("op__rsub__");
+        public static final Type op__rdiv__     = createType("op__rdiv__");
+        public static final Type op__rtruediv__ = createType("op__rtruediv__");
+        public static final Type op__rfloordiv__
+            = createType("op__rfloordiv__");
+        public static final Type op__rmod__     = createType("op__rmod__");
+        public static final Type op__rdivmod__  = createType("op__rdivmod__");
+        public static final Type op__rpow__     = createType("op__rpow__");
+        public static final Type op__rlshift__  = createType("op__rlshift__");
+        public static final Type op__rrshift__  = createType("op__rrshift__");
+        public static final Type op__rand__     = createType("op__rand__");
+        public static final Type op__rxor__     = createType("op__rxor__");
+        public static final Type op__ror__      = createType("op__ror__");
+        public static final Type op__iadd__     = createType("op__iadd__");
+        public static final Type op__isub__     = createType("op__isub__");
+        public static final Type op__imul__     = createType("op__imul__");
+        public static final Type op__idiv__     = createType("op__idiv__");
+        public static final Type op__itruediv__ = createType("op__itruediv__");
+        public static final Type op__ifloordiv__
+            = createType("op__ifloordiv__");
+        public static final Type op__imod__     = createType("op__imod__");
+        public static final Type op__ipow__     = createType("op__ipow__");
+        public static final Type op__ilshift__  = createType("op__ilshift__");
+        public static final Type op__irshift__  = createType("op__irshift__");
+        public static final Type op__iand__     = createType("op__iand__");
+        public static final Type op__ixor__     = createType("op__ixor__");
+        public static final Type op__ior__      = createType("op__ior__");
+        public static final Type op__neg__      = createType("op__neg__");
+        public static final Type op__pos__      = createType("op__pos__");
+        public static final Type op__abs__      = createType("op__abs__");
+        public static final Type op__invert__   = createType("op__invert__");
+        public static final Type op__complex__  = createType("op__complex__");
+        public static final Type op__int__      = createType("op__int__");
+        public static final Type op__long__     = createType("op__long__");
+        public static final Type op__float__    = createType("op__float__");
+        public static final Type op__oct__      = createType("op__oct__");
+        public static final Type op__hex__      = createType("op__hex__");
+        public static final Type op__index__    = createType("op__index__");
+        public static final Type op__coerce__   = createType("op__coerce__");
+        public static final Type op__enter__    = createType("op__enter__");
+        public static final Type op__exit__     = createType("op__exit__");
 
         /**
          * Check if a message type is a a response type.

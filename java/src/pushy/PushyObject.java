@@ -47,6 +47,14 @@ public interface PushyObject
     public Object __getattr__(String name);
 
     /**
+     * Set an attribute with the given name and value.
+     *
+     * @param name The name of the attribute whose value is to be set.
+     * @param value The value to set the attribute to.
+     */
+    public void __setattr__(String name, Object value);
+
+    /**
      * Get the value of an entry in the object, identified by the given key.
      *
      * @param key The index into the object of the entry to retrieve.

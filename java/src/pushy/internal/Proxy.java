@@ -26,12 +26,16 @@
 package pushy.internal;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class Proxy
 {
     /**
-     * Create a new Proxy object.
+     * Create an object which provides local access to a remote object.
      */
     public static Object
     getProxy(Number id, Number operators, Integer type, Object argument,
@@ -49,6 +53,114 @@ public class Proxy
             return new pushy.util.Map(proxy);
 
         return proxy;
+    }
+
+    /**
+     * Create an object which 
+     */
+    public static Type getType(Object object)
+    {
+        if (object instanceof List)
+            return Type.list;
+
+        if (object instanceof Map)
+            return Type.dictionary;
+
+        if (object instanceof Set)
+            return Type.set;
+
+        if (object instanceof Throwable)
+            return Type.exception;
+
+        return Type.object;
+    }
+
+    /**
+     * Get a bitmask for the operators supported by an object.
+     */
+    public static Number getOperators(Object object)
+    {
+        java.math.BigInteger mask = new java.math.BigInteger("0");
+        for (Iterator iter = Message.Type.getTypes().iterator();
+             iter.hasNext();)
+        {
+            Message.Type type = (Message.Type)iter.next();
+            if (type.getName().startsWith("op__"))
+            {
+                mask = mask.shiftLeft(1);
+                if (hasOperator(object, type))
+                    mask = mask.setBit(0);
+            }
+        }
+        return mask;
+    }
+
+    /**
+     * Check if the object supports the specified operator.
+     */
+    public static boolean hasOperator(Object object, Message.Type type)
+    {
+        // __cmp__ maps to Comparable.
+        if (type.equals(Message.Type.op__cmp__) ||
+            type.equals(Message.Type.op__rcmp__))
+        {
+            return object instanceof Comparable;
+        }
+
+        // Everything supports __hash__.
+        if (type.equals(Message.Type.op__hash__))
+            return true;
+
+        // Collections support __len__.
+        if (type.equals(Message.Type.op__len__))
+            return object instanceof Collection;
+
+        // Lists and maps support __getitem__, __setitem__ and __contains__.
+        if (type.equals(Message.Type.op__getitem__) ||
+            type.equals(Message.Type.op__setitem__) ||
+            type.equals(Message.Type.op__contains__))
+        {
+            return object instanceof List || object instanceof Map;
+        }
+
+        // All collections support __delitem__.
+        if (type.equals(Message.Type.op__delitem__))
+            return object instanceof Collection;
+
+        // Iterables support __iter__.
+        if (type.equals(Message.Type.op__iter__))
+            return object instanceof Iterable;
+
+        // Classes (constructors) and BoundMethod support __call__.
+        if (type.equals(Message.Type.op__call__))
+            return object instanceof Class || object instanceof Callable;
+
+        return false;
+    }
+
+    /**
+     * Get argument for the proxy object, to pass to the remote side.
+     */
+    public static Object getArgument(Object object, Type type)
+    {
+        if (type.equals(Type.dictionary))
+        {
+            Map map = (Map)object;
+            Object[] items = new Object[map.size()];
+            int i = 0;
+            for (Iterator iter = map.entrySet().iterator(); iter.hasNext();)
+            {
+                Map.Entry entry = (Map.Entry)iter.next();
+                items[i++] = new Object[]{entry.getKey(), entry.getValue()};
+            }
+            return items;
+        }
+        else if (type.equals(Type.list) || type.equals(Type.set))
+        {
+            Collection collection = (Collection)object;
+            return collection.toArray(new Object[]{});
+        }
+        return null;
     }
 
     /**

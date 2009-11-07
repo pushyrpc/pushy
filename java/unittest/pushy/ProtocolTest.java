@@ -7,6 +7,8 @@ import pushy.modules.*;
 
 import java.io.IOException;
 import java.io.File;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +78,50 @@ public class ProtocolTest extends TestCase
                     localMessageType.getName());
             }
         }
+    }
+
+    /**
+     * Make sure we can pass around non-primitive objects.
+     */
+    public void testDictionaryMap() {
+        Map map = new HashMap();
+        map.put("a", "b");
+        map.put("c", "d");
+
+        // Store a local object somewhere so that we might access it later.
+        Module builtin = client.getModule("__builtin__");
+        builtin.__setattr__("mymap", map);
+
+        // Check that the same object will be returned.
+        assertSame(map, builtin.__getattr__("mymap"));
+        assertSame(map, client.evaluate("__import__('__builtin__').mymap"));
+
+        // Check that a Map becomes a dictionary.
+        Boolean isdict =
+            (Boolean)client.evaluate(
+                "isinstance(__import__('__builtin__').mymap, dict)");
+        assertTrue(isdict.booleanValue());
+
+        // Check that dictionary methods can be called.
+        String[] keys =
+            (String[])client.evaluate(
+                "tuple(__import__('__builtin__').mymap.keys())");
+        String[] values =
+            (String[])client.evaluate(
+                "tuple(__import__('__builtin__').mymap.values())");
+        assertEquals(2, keys.length);
+        assertEquals(2, values.length);
+        Arrays.sort(keys);
+        Arrays.sort(values);
+        assertEquals("a", keys[0]);
+        assertEquals("c", keys[1]);
+        assertEquals("b", values[0]);
+        assertEquals("d", values[1]);
+
+        // Check that updates to the remote object are effective in the local
+        // one.
+        client.evaluate("__import__('__builtin__').mymap.update({'a':1})");
+        assertEquals(new Integer(1), map.get("a"));
     }
 }
 

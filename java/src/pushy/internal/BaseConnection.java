@@ -61,7 +61,8 @@ public abstract class BaseConnection
     private int responseCount = 0;
     private Map responseHandlers = new HashMap();
     private List requests = new ArrayList();
-    private Map proxiedObjects = new HashMap();
+    private Map proxiedObjects = new IdentityHashMap();
+    private Map proxiedObjectIds = new HashMap();
     private Map proxies = new HashMap();
     private Map proxyIds = new IdentityHashMap();
     private ThreadLocal threadRequestCount = new ThreadLocal();
@@ -94,7 +95,17 @@ public abstract class BaseConnection
         try
         {
             Object value = unmarshal(message.getPayload());
-            Object result = handle(message.getType(), value);
+            Object result = handleInternal(message.getType(), value);
+
+            // Before returning, return the "real" object for an exported
+            // object. Until now, the wrapper object was being passed around.
+            if (result instanceof ExportedObject)
+            {
+                ExportedObject eo = (ExportedObject)result;
+                if (eo.getConnection() == this)
+                    result = eo.getObject();
+            }
+
             if (isRequest)
                 sendResponse(result);
             return result;
@@ -128,7 +139,7 @@ public abstract class BaseConnection
         }
     }
 
-    protected Object handle(Message.Type type, Object arg)
+    protected Object handleInternal(Message.Type type, Object arg)
     {
         if (type.equals(Message.Type.response))
         {
@@ -136,13 +147,24 @@ public abstract class BaseConnection
         }
         else if (type.equals(Message.Type.exception))
         {
+            if (arg instanceof ExportedObject)
+                arg = ((ExportedObject)arg).getObject();
+
             if (arg instanceof RuntimeException)
                 throw (RuntimeException)arg;
             else
                 throw new RemoteException((PushyObject)arg);
         }
-        throw new RuntimeException("Unhandled message type: " + type);
+        else
+        {
+            return handle(type, arg);
+        }
     }
+
+    /**
+     * Handle a message.
+     */
+    protected abstract Object handle(Message.Type type, Object arg);
 
     /**
      * Serve asynchronous requests from the peer forever.
@@ -170,7 +192,7 @@ public abstract class BaseConnection
     protected Object
     sendRequest(Message.Type type, Object arg) throws IOException
     {
-        ResponseHandler handler = new ResponseHandler();
+        ResponseHandler handler = null;
 
         // If a request is being processed, increase the "waiting" count, so
         // other threads may attempt to receive messages.
@@ -178,14 +200,21 @@ public abstract class BaseConnection
         {
             if (!open)
                 throw new RuntimeException("Connection is closed");
+
             if (getThreadRequestCount() > 0)
             {
+                handler = (ResponseHandler)responseHandlers.get(
+                              new Long(ThreadId.getThreadId()));
                 if (processingCount == ++waitingCount)
                     processingCondition.notify();
             }
-
-            // Register the response handler.
-            responseHandlers.put(new Long(handler.getThreadId()), handler);
+            else
+            {
+                handler = new ResponseHandler();
+                assert !responseHandlers.containsKey(
+                           new Long(handler.getThreadId()));
+                responseHandlers.put(new Long(handler.getThreadId()), handler);
+            }
         }
 
         // Send the message.
@@ -205,7 +234,8 @@ public abstract class BaseConnection
         }
         finally
         {
-            responseHandlers.remove(new Long(handler.getThreadId()));
+            if (getThreadRequestCount() == 0)
+                responseHandlers.remove(new Long(handler.getThreadId()));
         }
         return handle(m);
     }
@@ -508,25 +538,67 @@ public abstract class BaseConnection
                 return;
             }
         }
-        else
+        // If the object exists in the proxies map, then return the
+        // identifier to the originator of the object.
+        synchronized (proxies)
         {
-            // If the object exists in the proxies map, then return the
-            // identifier to the originator of the object.
-            synchronized (proxies)
+            Number id = (Number)proxyIds.get(value);
+            if (id != null)
             {
-                Number id = (Number)proxyIds.get(value);
-                if (id != null)
-                {
-                    stream.write('o');
-                    Marshal.dump(id, stream);
-                    return;
-                }
+                stream.write('o');
+                Marshal.dump(id, stream);
+                return;
             }
         }
 
-        // TODO marshal complex local objects
-        throw new UnsupportedOperationException(
-                    "Cannot marshal Java object: " + value);
+        // If it's a previously proxied object and belongs to this connection,
+        // then shortcut the export step.
+        if (value instanceof ExportedObject)
+        {
+            ExportedObject eo = (ExportedObject)value;
+            if (eo.getConnection() == this)
+            {
+                stream.write('p');
+                marshal(((ExportedObject)value).getId(), stream);
+                return;
+            }
+        }
+        // If the object exists in the proxiedObjects map, then send the
+        // previously generated identifier to the peer.
+        synchronized (proxiedObjects)
+        {
+            ExportedObject eo = (ExportedObject)proxiedObjects.get(value);
+            if (eo != null && eo.getConnection() == this)
+            {
+                stream.write('p');
+                marshal(eo.getId(), stream);
+                return;
+            }
+            else
+            {
+                // XXX this only works at the moment because we don't
+                //     discard objects from the proxied objects map.
+                Number id = new Integer(proxiedObjects.size());
+                Proxy.Type type = Proxy.getType(value);
+                Number operators = Proxy.getOperators(value);
+                Object proxyArg = Proxy.getArgument(value, type);
+                Integer typeCode = new Integer(type.getCode());
+
+                eo = createExportObject(id, type, value);
+                proxiedObjects.put(value, eo);
+                proxiedObjectIds.put(id, eo);
+
+                Object[] args;
+                if (proxyArg == null)
+                    args = new Object[]{id, operators, typeCode};
+                else
+                    args = new Object[]{id, operators, typeCode, proxyArg};
+
+                stream.write('p');
+                marshal(args, stream);
+                return;
+            }
+        }
     }
 
     private Object unmarshal(byte[] bytes) throws IOException
@@ -535,6 +607,9 @@ public abstract class BaseConnection
         return unmarshal(stream);
     }
 
+    /**
+     * Unmarshal an object from its network representation.
+     */
     private Object unmarshal(InputStream stream) throws IOException
     {
         int type = stream.read();
@@ -558,7 +633,12 @@ public abstract class BaseConnection
             case 'o': // Proxy object that originated here.
             {
                 Integer id = (Integer)Marshal.load(stream);
-                return proxiedObjects.get(id);
+                synchronized (proxiedObjects)
+                {
+                    ExportedObject eo =
+                        (ExportedObject)proxiedObjectIds.get(id);
+                    return eo;
+                }
             }
             case 'p': // Remote proxy object.
             {
@@ -618,6 +698,12 @@ public abstract class BaseConnection
      */
     protected abstract Object
     createProxy(Number id, Number opmask, Integer type, Object args);
+
+    /**
+     * Create an export object, with the given ID, type and wrapped object.
+     */
+    protected abstract ExportedObject
+    createExportObject(Number id, Proxy.Type type, Object object);
 
     // Write a big-endian 32-bit integer to the stream.
     private void putInt32(int value, OutputStream stream) throws IOException

@@ -33,7 +33,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
 
-public class Map extends AbstractMap {
+public class Map extends AbstractMap implements Iterable {
     private PushyObject object;
     private PushyObject update;
     private PushyObject get;
@@ -46,6 +46,10 @@ public class Map extends AbstractMap {
         get = (PushyObject)object.__getattr__("get");
         contains = (PushyObject)object.__getattr__("__contains__");
         values = (PushyObject)object.__getattr__("values");
+    }
+
+    public Iterator iterator() {
+        return keySet().iterator();
     }
 
     public boolean containsKey(Object key) {

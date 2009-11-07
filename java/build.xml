@@ -7,11 +7,6 @@
 
     <target name="compile">
         <mkdir dir="build/classes"/>
-        <unjar dest="build/classes">
-            <fileset dir="lib">
-                <include name="*.jar"/>
-            </fileset>
-        </unjar>    
         <javac srcdir="src" destdir="build/classes" source="1.4" target="1.4">
             <compilerarg value="-Xlint"/>
         </javac>
@@ -66,6 +61,7 @@
 
     <target name="test" depends="jar,compile_tests">
         <junit fork="yes">
+            <jvmarg value="-enableassertions"/>
             <classpath>
                 <pathelement path="${classpath}"/>
                 <pathelement location="build/pushy.jar"/>

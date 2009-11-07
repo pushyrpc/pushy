@@ -26,11 +26,19 @@
 package pushy.internal;
 
 import pushy.Module;
+import pushy.PushyObject;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,6 +57,14 @@ public class Connection extends BaseConnection
     createProxy(Number id, Number opmask, Integer type, Object args)
     {
         return Proxy.getProxy(id, opmask, type, args, this);
+    }
+
+    protected ExportedObject
+    createExportObject(Number id, Proxy.Type type, Object object)
+    {
+        if (type.equals(Proxy.Type.dictionary))
+            return new ExportedMap(id, (Map)object, this);
+        return new ExportedObject(id, type, object, this);
     }
 
     /**
@@ -140,6 +156,19 @@ public class Connection extends BaseConnection
         }
     }
 
+    public void setattr(Object object, String name, Object value)
+    {
+        try
+        {
+            sendRequest(Message.Type.setattr,
+                        new Object[]{object, name, value});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     public Object getitem(Object object, Object index)
     {
         return invokeOperator(
@@ -174,6 +203,62 @@ public class Connection extends BaseConnection
         {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Handle a message.
+     */
+    protected Object handle(Message.Type type, Object arg)
+    {
+        if (type.equals(Message.Type.evaluate))
+            throw new UnsupportedOperationException("Evaluate is unsupported");
+
+        // __getattr__
+        if (type.equals(Message.Type.getattr))
+        {
+            Object[] args = (Object[])arg;
+            return ((PushyObject)args[0]).__getattr__((String)args[1]);
+        }
+
+        // __setattr__
+        if (type.equals(Message.Type.setattr))
+        {
+            Object[] args = (Object[])arg;
+            ((PushyObject)args[0]).__setattr__((String)args[1], args[2]);
+            return null;
+        }
+
+        // __str__ & __repr__
+        if (type.equals(Message.Type.getstr) ||
+            type.equals(Message.Type.getrepr))
+        {
+            return arg.toString();
+        }
+
+        // __hash__
+        if (type.equals(Message.Type.op__hash__))
+            return new Integer(arg.hashCode());
+
+        // __call__
+        if (type.equals(Message.Type.op__call__))
+        {
+            Object[] args = (Object[])arg;
+            Object[] kwargs = (Object[])args[2];
+            Map kwargsMap = null;
+            if (kwargs != null && kwargs.length > 0)
+            {
+                kwargsMap = new HashMap();
+                for (int i = 0; i < kwargs.length; ++i)
+                {
+                    Object[] pair = (Object[])kwargs[i];
+                    kwargsMap.put(pair[0], pair[1]);
+                }
+            }
+            return ((PushyObject)args[0]).__call__(
+                       (Object[])args[1], kwargsMap);
+        }
+
+        throw new UnsupportedOperationException("Unsupported type: " + type);
     }
 }
 

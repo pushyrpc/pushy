@@ -38,6 +38,7 @@ public class FileInputStream extends InputStream {
     private PushyObject closeMethod;
     
     public FileInputStream(PushyObject file) {
+        assert file != null;
         this.file = file;
         readMethod = (PushyObject)file.__getattr__("read");
         closeMethod = (PushyObject)file.__getattr__("close");

@@ -58,6 +58,11 @@ public class PushyObjectImpl implements PushyObject
         return connection.getattr(this, key);
     }
 
+    public void __setattr__(String key, Object value)
+    {
+        connection.setattr(this, key, value);
+    }
+
     public Object __getitem__(Object index)
     {
         return connection.getitem(this, index);

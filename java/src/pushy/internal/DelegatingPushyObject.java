@@ -46,6 +46,11 @@ public class DelegatingPushyObject implements PushyObject
         return delegate.__getattr__(name);
     }
 
+    public void __setattr__(String name, Object value)
+    {
+        delegate.__setattr__(name, value);
+    }
+
     public Object __getitem__(Object key)
     {
         return delegate.__getitem__(key);
