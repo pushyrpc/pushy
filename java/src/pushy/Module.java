@@ -25,21 +25,34 @@
 
 package pushy;
 
-public class Module extends PushyObject {
-    public Module(Client client, String name) {
-        super(getModuleObject(client, name));
+public class Module extends pushy.internal.DelegatingPushyObject
+{
+    public Module(Client client, String name)
+    {
+        this(__import__(client, name));
     }
 
-    private static PushyObject getModuleObject(Client client, String name) {
-        PushyObject module =
-            (PushyObject)client.evaluate("__import__('" + name + "')");
+    protected Module(PushyObject object)
+    {
+        super(object);
+    }
 
-        if (name.contains(".")) {
+    protected PushyObject __getmethod__(String name)
+    {
+        return (PushyObject)__getattr__(name);
+    }
+
+    private static PushyObject __import__(Client client, String name)
+    {
+        // Get the module object.
+        PushyObject module =
+            (PushyObject)client.evaluate("__import__('"+name+"')");
+        if (name.contains("."))
+        {
             String[] parts = name.split("\\.");
             for (int i = 1; i < parts.length; ++i)
                 module = (PushyObject)module.__getattr__(parts[i]);
         }
-        
         return module;
     }
 }

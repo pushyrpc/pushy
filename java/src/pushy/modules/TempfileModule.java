@@ -37,7 +37,7 @@ public class TempfileModule extends Module {
     public TempfileModule(Client client) {
         super(client, "tempfile");
         this.client = client;
-        mkdtemp = (PushyObject)__getattr__("mkdtemp");
+        mkdtemp = __getmethod__("mkdtemp");
     }
 
     public pushy.io.File mkdtemp() {

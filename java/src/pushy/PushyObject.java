@@ -25,79 +25,72 @@
 
 package pushy;
 
-import java.util.Map;
-
-public class PushyObject
+/**
+ * An interface for Pushy proxy objects.
+ */
+public interface PushyObject
 {
-    private Client client;
-    private long id;
+    /**
+     * Check if the object has an attribute with the given name.
+     *
+     * @param name The name of the attribute to determine the existence of.
+     * @return True if the attribute exists, else false.
+     */
+    public boolean __hasattr__(String key);
 
-    public PushyObject(Client client, long id)
-    {
-        this.client = client;
-        this.id = id;
-    }
+    /**
+     * Get an attribute with the given name.
+     *
+     * @param name The name of the attribute whose value is to be returned.
+     * @return The value of the attribute.
+     */
+    public Object __getattr__(String name);
 
-    public PushyObject(PushyObject object)
-    {
-        this.client = object.client;
-        this.id = object.id;
-    }
+    /**
+     * Get the value of an entry in the object, identified by the given key.
+     *
+     * @param key The index into the object of the entry to retrieve.
+     * @return The value of the entry in the object at the specified index.
+     */
+    public Object __getitem__(Object key);
 
-    public String toString()
-    {
-        PushyObject str = (PushyObject)__getattr__("__str__");
-        return (String)str.__call__(new Object[]{});
-    }
+    /**
+     * Set the value of an entry in the object, identified by the given key.
+     *
+     * @param key The index into the object of the entry to modify.
+     * @param value The new value to set.
+     */
+    public void __setitem__(Object key, Object value);
 
-    public Client getClient()
-    {
-        return client;
-    }
+    /**
+     * Get the length of the object (i.e. call len(object))
+     *
+     * @return The length of the object.
+     */
+    public int __len__();
 
-    public Object __call__()
-    {
-        return client.callobj(id);
-    }
+    /**
+     * Call the object with no arguments.
+     *
+     * @return The return value of the call.
+     */
+    public Object __call__();
 
-    public Object __call__(Object[] args)
-    {
-        return client.callobj(id, args);
-    }
+    /**
+     * Call the object with positional arguments.
+     *
+     * @param args Positional arguments.
+     * @return The return value of the call.
+     */
+    public Object __call__(Object[] args);
 
-    public Object __call__(Object[] args, Map kwargs)
-    {
-        return client.callobj(id, args, kwargs);
-    }
-
-    public boolean __hasattr__(String key)
-    {
-        return client.hasattr(id, key);
-    }
-
-    public Object __getattr__(String key)
-    {
-        return client.getattr(id, key);
-    }
-
-    public PushyObject __getmethod__(String key)
-    {
-        return (PushyObject)__getattr__(key);
-    }
-
-    public Object __getitem__(Object key)
-    {
-        return client.getitem(id, key);
-    }
-
-    public void __setitem__(Object key, Object value)
-    {
-        client.setitem(id, key, value);
-    }
-
-    public int __len__()
-    {
-        return client.len(id);
-    }
+    /**
+     * Call the object with positional and keyword arguments.
+     *
+     * @param args Positional arguments.
+     * @param kwargs Keyword arguments.
+     * @return The return value of the call.
+     */
+    public Object __call__(Object[] args, java.util.Map kwargs);
 }
 

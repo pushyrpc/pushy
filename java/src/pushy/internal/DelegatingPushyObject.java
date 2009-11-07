@@ -23,29 +23,57 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package pushy.xmlrpc;
+package pushy.internal;
 
-import org.apache.xmlrpc.serializer.TypeSerializer;
-import org.apache.xmlrpc.serializer.TypeSerializerImpl;
-import org.xml.sax.ContentHandler;
-import org.xml.sax.SAXException;
+import pushy.PushyObject;
 
-/**
- * The null (nil) serializer provided by the Apache XML-RPC library uses the
- * "ext" namespace. We don't want a namespace, as the Python XML-RPC server
- * doesn't expect it.
- *
- * @author Andrew Wilkins <axwalk@gmail.com>
- */
-public class PythonNullSerializer extends TypeSerializerImpl {
-    public static final String NIL_TAG = "nil";
+public class DelegatingPushyObject implements PushyObject
+{
+    private PushyObject delegate;
 
-    public void
-    write(ContentHandler pHandler, Object pObject) throws SAXException {
-        pHandler.startElement("", VALUE_TAG, VALUE_TAG, ZERO_ATTRIBUTES);
-        pHandler.startElement("", NIL_TAG, NIL_TAG, ZERO_ATTRIBUTES);
-        pHandler.endElement("", NIL_TAG, NIL_TAG);
-        pHandler.endElement("", VALUE_TAG, VALUE_TAG);
+    public DelegatingPushyObject(PushyObject delegate)
+    {
+        this.delegate = delegate;
+    }
+
+    public boolean __hasattr__(String key)
+    {
+        return delegate.__hasattr__(key);
+    }
+
+    public Object __getattr__(String name)
+    {
+        return delegate.__getattr__(name);
+    }
+
+    public Object __getitem__(Object key)
+    {
+        return delegate.__getitem__(key);
+    }
+
+    public void __setitem__(Object key, Object value)
+    {
+        delegate.__setitem__(key, value);
+    }
+
+    public int __len__()
+    {
+        return delegate.__len__();
+    }
+
+    public Object __call__()
+    {
+        return delegate.__call__();
+    }
+
+    public Object __call__(Object[] args)
+    {
+        return delegate.__call__(args);
+    }
+
+    public Object __call__(Object[] args, java.util.Map kwargs)
+    {
+        return delegate.__call__(args, kwargs);
     }
 }
 

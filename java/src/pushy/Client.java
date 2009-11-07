@@ -39,11 +39,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.xmlrpc.XmlRpcException;
-import org.apache.xmlrpc.client.XmlRpcClient;
-import org.apache.xmlrpc.client.XmlRpcClientConfigImpl;
 import pushy.modules.ModuleFactory;
-import pushy.xmlrpc.PushyTypeFactory;
+import pushy.internal.Connection;
 
 public class Client
 {
@@ -51,7 +48,7 @@ public class Client
         getJarPath(Client.class.getResource("Client.class"));
 
     // Determine the path to the jar file that defines Pushy, which will be
-    // used to import the 'jpushy' module.
+    // used to import the 'pushy' module.
     private static String getJarPath(URL url)
     {
         try
@@ -80,9 +77,8 @@ public class Client
         return null;
     }
 
-    private Process jpushyServer;
-    private XmlRpcClientConfigImpl config;
-    private XmlRpcClient client;
+    private Process pushyServer;
+    private Connection connection;
     private Map modules = new HashMap();
     private RemoteSystem system;
 
@@ -105,37 +101,22 @@ public class Client
      */
     public Client(String address, Map properties) throws IOException
     {
-        String jpushyLoaderProgram =
-            "import subprocess, sys;" +
+        String pushyLoaderProgram =
+            "import sys;" +
             "sys.path.insert(0, sys.argv[1]);" +
-            "import jpushy; jpushy.start()";
+            "import pushy.server;" +
+            "pushy.server.serve_forever(sys.stdin, sys.stdout)";
 
         // Start XML-RPC server process.
         String[] args =
-            new String[]{"python", "-c", jpushyLoaderProgram, jarPath};
-        jpushyServer = Runtime.getRuntime().exec(args);
+            new String[]{"python", "-u", "-c", pushyLoaderProgram, jarPath};
+        pushyServer = Runtime.getRuntime().exec(args);
 
         try
         {
-            // Determine the port that the XML-RPC server is listening on.
-            String line =
-                new BufferedReader(
-                    new InputStreamReader(
-                        jpushyServer.getInputStream())).readLine();
-            int jpushyServerPort = Integer.parseInt(line);
-
-            URL url = new URL("http://127.0.0.1:"+jpushyServerPort+"/RPC2");
-            config = new XmlRpcClientConfigImpl();
-            config.setServerURL(url);
-            config.setEnabledForExceptions(true);
-            config.setEnabledForExtensions(true);
-
-            client = new XmlRpcClient();
-            client.setConfig(config);
-            client.setTypeFactory(new PushyTypeFactory(client, this));
-
-            // Finally, call the 'connect' function.
-            execute("connect", new Object[]{address, properties});
+            // Create the connection.
+            connection = new Connection(pushyServer.getInputStream(),
+                                        pushyServer.getOutputStream());
         }
         catch (Throwable e)
         {
@@ -145,7 +126,7 @@ public class Client
                 BufferedReader reader =
                     new BufferedReader(
                             new InputStreamReader(
-                                    jpushyServer.getErrorStream()));
+                                    pushyServer.getErrorStream()));
                 String line = reader.readLine();
                 while (line != null)
                 {
@@ -157,19 +138,18 @@ public class Client
             {
                 e2.printStackTrace();
             }
-
-            jpushyServer.destroy();
+            pushyServer.destroy();
             throw new RuntimeException(e);
         }
-
-        jpushyServer.getOutputStream().close();
-        jpushyServer.getErrorStream().close();
-        jpushyServer.getInputStream().close();
+        pushyServer.getErrorStream().close();
     }
 
-    public void finalize()
+    protected void finalize()
     {
         close();
+        try {
+            super.finalize();
+        } catch (Throwable e) {}
     }
 
     /**
@@ -177,28 +157,22 @@ public class Client
      */
     public void close()
     {
-        if (jpushyServer != null)
+        if (pushyServer != null)
         {
             synchronized (this)
             {
-                if (jpushyServer != null)
+                if (pushyServer != null)
                 {
-                    jpushyServer.destroy();
-                    jpushyServer = null;
+                    try
+                    {
+                        pushyServer.getOutputStream().close();
+                        pushyServer.getInputStream().close();
+                    }
+                    catch (java.io.IOException e) {}
+                    pushyServer.destroy();
+                    pushyServer = null;
                 }
             }
-        }
-    }
-
-    protected Object execute(String method, Object[] args)
-    {
-        try
-        {
-            return client.execute(method, args);
-        }
-        catch (XmlRpcException e)
-        {
-            throw new RuntimeException(e);
         }
     }
 
@@ -207,45 +181,14 @@ public class Client
      */
     public Object evaluate(String expression)
     {
-        return execute("evaluate", new Object[]{expression});
-    }
-
-    /**
-     * Call a function with no arguments.
-     *
-     * @param function The name of the function to call.
-     * @return The result of calling the function.
-     */
-    public Object call(String function)
-    {
-        return call(function, null, null);
-    }
-
-    /**
-     * Call a function with the specified arguments.
-     *
-     * @param function The name of the function to call.
-     * @param args Positional arguments to invoke the function with.
-     * @return The result of calling the function.
-     */
-    public Object call(String function, Object[] args)
-    {
-        return call(function, args, null);
-    }
-
-    /**
-     * Call a function, given its "absolute" name, i.e. qualified with its
-     * module, with the specified positional and named arguments.
-     *
-     * @param function The name of the function to call.
-     * @param args Positional arguments to invoke the function with.
-     * @param namedArgs Named (keyword) arguments to call the function with.
-     * @return The result of calling the function.
-     */
-    public Object call(String function, Object[] args, Map namedArgs)
-    {
-        Object[] callArgs = new Object[] {function, args, namedArgs};
-        return execute("call", callArgs);
+        try
+        {
+            return connection.evaluate(expression);
+        }
+        catch (java.io.IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -266,104 +209,6 @@ public class Client
     }
 
     /**
-     * Determine whether the object with the specified ID has the attribute
-     * with the given name.
-     *
-     * @param id The object ID.
-     * @param name The attribute name.
-     * @return True if and only if the object has the attribute, else false.
-     */
-    public boolean hasattr(long id, String name)
-    {
-        Object res = execute("hasattr_", new Object[]{""+id, name});
-        return ((Boolean)res).booleanValue();
-    }
-
-    /**
-     * Get the value of an attribute from the object with the specified ID.
-     *
-     * @param id The object ID.
-     * @param name The attribute name.
-     * @return The value of the attribute of the object.
-     */
-    public Object getattr(long id, String name)
-    {
-        return execute("getattr_", new Object[]{""+id, name});
-    }
-
-    /**
-     * Get an item of an object, given a key (i.e. object[key])
-     *
-     * @param id The object ID.
-     * @param name The item key.
-     * @return The value of the item of the object.
-     */
-    public Object getitem(long id, Object key)
-    {
-        return execute("getitem_", new Object[]{""+id, key});
-    }
-
-    /**
-     * Set the value of an item of an object, given a key and value.
-     *
-     * @param id The object ID.
-     * @param name The item key.
-     * @param value The item value.
-     */
-    public void setitem(long id, Object key, Object value)
-    {
-        execute("setitem_", new Object[]{""+id, key, value});
-    }
-
-    /**
-     * Get the length of the object.
-     *
-     * @param id The object ID.
-     * @return The length of the object.
-     */
-    public int len(long id)
-    {
-        return ((Integer)execute("getlen_", new Object[]{""+id})).intValue();
-    }
-
-    /**
-     * Call the object with no arguments.
-     *
-     * @param id The object ID.
-     * @return The result of calling the object.
-     */
-    public Object callobj(long id)
-    {
-        return callobj(id, null, null);
-    }
-
-    /**
-     * Call the object with positional arguments.
-     *
-     * @param id The object ID.
-     * @param args The positional arguments to call the object with.
-     * @return The result of calling the object.
-     */
-    public Object callobj(long id, Object[] args)
-    {
-        return callobj(id, args, null);
-    }
-
-    /**
-     * Call the object with positional and keyword arguments.
-     *
-     * @param id The object ID.
-     * @param args The positional arguments to call the object with.
-     * @param kwargs The keyword arguments to call the object with.
-     * @return The result of calling the object.
-     */
-    public Object callobj(long id, Object[] args, Map kwargs)
-    {
-        Object[] callArgs = new Object[]{""+id, args, kwargs};
-        return execute("callobj", callArgs);
-    }
-
-    /**
      * Copy a local file to the remote system, using a transport-specific
      * mechanism for greater efficiency where available.
      *
@@ -372,7 +217,7 @@ public class Client
      */
     public void putfile(String localFile, String remoteFile)
     {
-        execute("putfile", new Object[]{localFile, remoteFile});
+        //execute("putfile", new Object[]{localFile, remoteFile});
     }
 
     /**
@@ -384,7 +229,7 @@ public class Client
      */
     public void getfile(String remoteFile, String localFile)
     {
-        execute("getfile", new Object[]{remoteFile, localFile});
+        //execute("getfile", new Object[]{remoteFile, localFile});
     }
 
     /**

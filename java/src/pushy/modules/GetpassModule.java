@@ -34,7 +34,7 @@ public class GetpassModule extends Module {
 
     public GetpassModule(Client client) {
         super(client, "getpass");
-        getuserMethod = (PushyObject)__getattr__("getuser");
+        getuserMethod = __getmethod__("getuser");
     }
 
     public String getuser() {

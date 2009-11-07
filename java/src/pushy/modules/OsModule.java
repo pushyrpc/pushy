@@ -54,23 +54,23 @@ public class OsModule extends Module {
     public OsModule(Client client) {
         super(client, "os");
         if (__hasattr__("kill"))
-            killMethod = (PushyObject)__getattr__("kill");
-        chdirMethod = (PushyObject)__getattr__("chdir");
+            killMethod = __getmethod__("kill");
+        chdirMethod = __getmethod__("chdir");
         chmodMethod = __getmethod__("chmod");
-        getcwdMethod = (PushyObject)__getattr__("getcwd");
-        removeMethod = (PushyObject)__getattr__("remove");
-        rmdirMethod = (PushyObject)__getattr__("rmdir");
-        mkdirMethod = (PushyObject)__getattr__("mkdir");
-        makedirsMethod = (PushyObject)__getattr__("makedirs");
-        statMethod = (PushyObject)__getattr__("stat");
-        listdirMethod = (PushyObject)__getattr__("listdir");
+        getcwdMethod = __getmethod__("getcwd");
+        removeMethod = __getmethod__("remove");
+        rmdirMethod = __getmethod__("rmdir");
+        mkdirMethod = __getmethod__("mkdir");
+        makedirsMethod = __getmethod__("makedirs");
+        statMethod = __getmethod__("stat");
+        listdirMethod = __getmethod__("listdir");
         renameMethod = __getmethod__("rename");
 
         // Get module-level attributes.
         sep = (String)__getattr__("sep");
         pathsep = (String)__getattr__("pathsep");
         linesep = (String)__getattr__("linesep");
-        environ = new PushyMapObject((PushyObject)__getattr__("environ"));
+        environ = (Map)__getattr__("environ");
     }
 
     public PushyObject stat(String path) {

@@ -23,7 +23,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package pushy;
+package pushy.internal;
+
+import pushy.PushyObject;
 
 import java.util.AbstractMap;
 import java.util.AbstractSet;

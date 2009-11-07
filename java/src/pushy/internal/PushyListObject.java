@@ -23,7 +23,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package pushy;
+package pushy.internal;
+
+import pushy.PushyObject;
 
 import java.util.AbstractList;
 import java.util.Collection;

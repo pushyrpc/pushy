@@ -27,6 +27,8 @@ package pushy.internal;
 
 public class MarshalException extends RuntimeException
 {
+    public static final long serialVersionUID = 0L;
+
     MarshalException(String message)
     {
         super(message);

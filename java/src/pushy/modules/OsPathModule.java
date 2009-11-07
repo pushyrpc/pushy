@@ -39,12 +39,12 @@ public class OsPathModule extends Module {
 
     public OsPathModule(Client client) {
         super(client, "os.path");
-        existsMethod = (PushyObject)__getattr__("exists");
-        isDirMethod = (PushyObject)__getattr__("isdir");
-        isFileMethod = (PushyObject)__getattr__("isfile");
-        isAbsMethod = (PushyObject)__getattr__("isabs");
-        abspathMethod = (PushyObject)__getattr__("abspath");
-        expanduserMethod = (PushyObject)__getattr__("expanduser");
+        existsMethod = __getmethod__("exists");
+        isDirMethod = __getmethod__("isdir");
+        isFileMethod = __getmethod__("isfile");
+        isAbsMethod = __getmethod__("isabs");
+        abspathMethod = __getmethod__("abspath");
+        expanduserMethod = __getmethod__("expanduser");
     }
 
     public boolean exists(String path) {

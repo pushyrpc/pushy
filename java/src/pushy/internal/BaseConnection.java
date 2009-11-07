@@ -35,6 +35,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,7 @@ import java.util.logging.Logger;
  * Base class for Pushy connections, defining generic protocol and message
  * handling procedures.
  */
-public class BaseConnection
+public abstract class BaseConnection
 {
     private static final Logger logger =
         Logger.getLogger(BaseConnection.class.getName());
@@ -61,6 +62,8 @@ public class BaseConnection
     private Map responseHandlers = new HashMap();
     private List requests = new ArrayList();
     private Map proxiedObjects = new HashMap();
+    private Map proxies = new HashMap();
+    private Map proxyIds = new IdentityHashMap();
     private ThreadLocal threadRequestCount = new ThreadLocal();
     private ThreadLocal peerThread = new ThreadLocal();
 
@@ -233,7 +236,8 @@ public class BaseConnection
         Message msg = new Message(type, marshal(value), getPeerThread());
         synchronized (ostream)
         {
-            logger.log(Level.INFO, "Sending message: {0}", new Object[]{msg});
+            logger.log(
+                Level.FINEST, "Sending message: {0}", new Object[]{msg});
             msg.pack(ostream);
             ostream.flush();
         }
@@ -453,7 +457,10 @@ public class BaseConnection
     {
         synchronized (istream)
         {
-            return Message.unpack(istream);
+            Message message = Message.unpack(istream);
+            logger.log(
+                Level.FINEST, "Received message: {0}", new Object[]{message});
+            return message;
         }
     }
 
@@ -481,8 +488,39 @@ public class BaseConnection
             stream.write('t');
             for (int i = 0; i < length; ++i)
                 marshal(Array.get(value, i), stream);
+            return;
         }
-        // TODO
+
+        // If it's a proxy object and it belongs to this connection, then
+        // shortcut the proxy ID lookup.
+        if (value instanceof PushyObjectImpl)
+        {
+            PushyObjectImpl proxy = (PushyObjectImpl)value;
+            if (proxy.getConnection() == this)
+            {
+                stream.write('o');
+                Marshal.dump(proxy.getId(), stream);
+                return;
+            }
+        }
+        else
+        {
+            // If the object exists in the proxies map, then return the
+            // identifier to the originator of the object.
+            synchronized (proxies)
+            {
+                Number id = (Number)proxyIds.get(value);
+                if (id != null)
+                {
+                    stream.write('o');
+                    Marshal.dump(id, stream);
+                    return;
+                }
+            }
+        }
+
+        // TODO marshal complex local objects
+        throw new UnsupportedOperationException("Cannot marshal Java objects");
     }
 
     private Object unmarshal(byte[] bytes) throws IOException
@@ -502,7 +540,14 @@ public class BaseConnection
             }
             case 't': // Tuple
             {
-                return unmarshalArray(stream);
+                List items = new ArrayList();
+                while (stream.available() > 0)
+                {
+                    int size = getInt32(stream);
+                    byte[] bytes = readBytes(stream, size);
+                    items.add(unmarshal(bytes));
+                }
+                return Marshal.createArray(items);
             }
             case 'o': // Proxy object that originated here.
             {
@@ -511,7 +556,48 @@ public class BaseConnection
             }
             case 'p': // Remote proxy object.
             {
-                Object id = Marshal.load(stream);
+                Object value = Marshal.load(stream);
+                if (value instanceof Object[])
+                {
+                    Object[] idParts = (Object[])value;
+
+                    // Split apart the id.
+                    Object arg = null;
+                    Number id = (Number)idParts[0];
+                    Number opmask = (Number)idParts[1];
+                    Integer objectType = (Integer)idParts[2];
+                    if (idParts.length > 3)
+                        arg = unmarshal((byte[])idParts[3]);
+
+                    // Create the proxy object.
+                    Object proxy = createProxy(id, opmask, objectType, arg);
+
+                    // Add the proxy and wake up anyone waiting for it to be
+                    // registered.
+                    synchronized (proxies)
+                    {
+                        proxies.put(id, proxy);
+                        proxyIds.put(proxy, id);
+                        proxies.notifyAll();
+                    }
+                    return proxy;
+                }
+                else
+                {
+                    Number id = (Number)value;
+                    synchronized (proxies)
+                    {
+                        Object proxy = proxies.get(id);
+                        while (proxy == null)
+                        {
+                            try {
+                                wait();
+                            } catch (InterruptedException e) {}
+                            proxy = proxies.get(id);
+                        }
+                        return proxy;
+                    }
+                }
             }
             default:
                 logger.severe("Unhandled type: " + (char)type);
@@ -519,17 +605,13 @@ public class BaseConnection
         return null;
     }
 
-    private Object unmarshalArray(InputStream stream) throws IOException
-    {
-        List items = new ArrayList();
-        while (stream.available() > 0)
-        {
-            int size = getInt32(stream);
-            byte[] bytes = readBytes(stream, size);
-            items.add(unmarshal(bytes));
-        }
-        return Marshal.createArray(items);
-    }
+    /**
+     * Create a proxy object, with the given ID, type, a bitmask describing the
+     * operators the remote object contains, and optionally some arguments for
+     * the object's constructor.
+     */
+    protected abstract Object
+    createProxy(Number id, Number opmask, Integer type, Object args);
 
     private int getInt32(InputStream stream) throws IOException
     {

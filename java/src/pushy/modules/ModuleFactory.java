@@ -50,34 +50,24 @@ public class ModuleFactory {
         classes.put("time", TimeModule.class);
     }
 
-    public static Module createModule(Client client, String name) {
+    public static Module createModule(Client client, String name)
+    {
+        // Wrap the module object in a Module.
         Class class_ = (Class)classes.get(name);
-        if (class_ == null)
-            return new Module(client, name);
-
-        try {
-            Constructor ctor =
-                class_.getConstructor(new Class[]{Client.class});
-            return (Module)ctor.newInstance(new Object[]{client});
-        } catch (SecurityException e) {
-            e.printStackTrace();
-            return new Module(client, name);
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-            return new Module(client, name);
-        } catch (IllegalArgumentException e) {
-            e.printStackTrace();
-            return new Module(client, name);
-        } catch (InstantiationException e) {
-            e.printStackTrace();
-            return new Module(client, name);
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-            return new Module(client, name);
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-            return new Module(client, name);
+        if (class_ != null)
+        {
+            try
+            {
+                Constructor ctor =
+                    class_.getConstructor(new Class[]{Client.class});
+                return (Module)ctor.newInstance(new Object[]{client});
+            }
+            catch (Throwable e)
+            {
+                e.printStackTrace();
+            }
         }
+        return new Module(client, name);
     }
 }
 

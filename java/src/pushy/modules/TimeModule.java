@@ -34,7 +34,7 @@ public class TimeModule extends Module {
 
     public TimeModule(Client client) {
         super(client, "time");    
-        timeMethod = (PushyObject)__getattr__("time");
+        timeMethod = __getmethod__("time");
     }
 
     public float time() {

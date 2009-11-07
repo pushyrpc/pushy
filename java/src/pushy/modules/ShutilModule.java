@@ -34,7 +34,7 @@ public class ShutilModule extends Module {
     
     public ShutilModule(Client client) {
         super(client, "shutil");    
-        copyfileMethod = (PushyObject)__getattr__("copyfile");
+        copyfileMethod = __getmethod__("copyfile");
     }
 
     public void copyfile(String src, String dst) {

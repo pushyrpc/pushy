@@ -34,7 +34,7 @@ public class SocketModule extends Module {
 
     public SocketModule(Client client) {
         super(client, "socket");    
-        gethostnameMethod = (PushyObject)__getattr__("gethostname");
+        gethostnameMethod = __getmethod__("gethostname");
     }
 
     public String getHostName() {

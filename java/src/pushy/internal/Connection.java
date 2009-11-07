@@ -25,17 +25,131 @@
 
 package pushy.internal;
 
+import pushy.Module;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
+
 public class Connection extends BaseConnection
 {
-    public Connection(java.io.InputStream istream,
-                      java.io.OutputStream ostream)
+    public Connection(InputStream istream, OutputStream ostream)
     {
         super(istream, ostream);
     }
 
-    public Object evaluate(String expression) throws java.io.IOException
+    protected Object
+    createProxy(Number id, Number opmask, Integer type, Object args)
     {
-        return sendRequest(Message.Type.evaluate, expression);
+        return Proxy.getProxy(id, opmask, type, args, this);
+    }
+
+    public Object evaluate(String expression)
+    {
+        try
+        {
+            return sendRequest(Message.Type.evaluate, expression);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public boolean hasattr(Object object, String name)
+    {
+        try
+        {
+            sendRequest(Message.Type.getattr, new Object[]{object, name});
+            return true;
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (RemoteException e)
+        {
+            return false;
+        }
+    }
+
+    public Object getattr(Object object, String name)
+    {
+        try
+        {
+            return sendRequest(Message.Type.getattr,
+                               new Object[]{object, name});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Object getitem(Object object, Object index)
+    {
+        try
+        {
+            return sendRequest(Message.Type.op__getitem__,
+                               new Object[]{object, index});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void setitem(Object object, Object index, Object value)
+    {
+        try
+        {
+            sendRequest(
+                Message.Type.op__setitem__,
+                new Object[]{object, index, value});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public int len(Object object)
+    {
+        try
+        {
+            Integer length =
+                (Integer)sendRequest(Message.Type.op__len__, object);
+            return length.intValue();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Object call(Object object, Object[] args, java.util.Map kwargs)
+    {
+        try
+        {
+            return sendRequest(Message.Type.op__call__,
+                               new Object[]{object, args, kwargs});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public String str(Object object)
+    {
+        try
+        {
+            return (String)sendRequest(Message.Type.getstr, object);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 }
 

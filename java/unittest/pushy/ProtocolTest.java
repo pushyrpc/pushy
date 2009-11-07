@@ -12,10 +12,10 @@ import java.util.Set;
 
 public class ProtocolTest extends TestCase
 {
-    private Client2 client;
+    private Client client;
 
     public void setUp() throws IOException {
-        client = new Client2("local:");
+        client = new Client("local:");
     }
 
     public void tearDown() {
@@ -35,6 +35,24 @@ public class ProtocolTest extends TestCase
         assertEquals(1, array[0]);
         assertEquals(2, array[1]);
         assertEquals(3, array[2]);
+    }
+
+    public void testStrings() {
+        Object value = client.evaluate("u'\\u1234'");
+        assertEquals("\u1234", value);
+
+        // Make sure all of the characters 0-255 are returned unscathed.
+        value = client.evaluate("''.join([chr(i) for i in range(256)])");
+        assertTrue(value instanceof String);
+        String stringValue = (String)value;
+        assertEquals(256, stringValue.length());
+        for (int i = 0; i < stringValue.length(); ++i)
+            assertEquals((char)i, stringValue.charAt(i));
+    }
+
+    public void testProxyObject() {
+        Object dirFunction = client.evaluate("dir");
+        System.out.println(dirFunction);
     }
 }
 

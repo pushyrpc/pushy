@@ -145,6 +145,9 @@ public class MarshalTest extends TestCase
     {
         assertMarshalIdentity(new Object[]{});
         assertMarshalIdentity(new int[]{1,2,3});
+        assertBytesEqual(
+            new byte[]{'(', 1, 0, 0, 0, 'i', 1, 0, 0, 0},
+            Marshal.dump(new int[]{1}));
     }
 }
 

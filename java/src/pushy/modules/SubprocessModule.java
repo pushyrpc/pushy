@@ -40,12 +40,16 @@ public class SubprocessModule extends Module {
     private OsModule osModule;
     private SignalModule signalModule;
     private PushyObject Popen;
+    private Object PIPE;
+    private Object STDOUT;
 
     public SubprocessModule(Client client) {
         super(client, "subprocess");
         osModule = (OsModule)client.getModule("os");
         signalModule = (SignalModule)client.getModule("signal");
-        Popen = (PushyObject)__getattr__("Popen");
+        Popen = __getmethod__("Popen");
+        PIPE = __getattr__("PIPE");
+        STDOUT = __getattr__("STDOUT");
     }
 
     public Process exec(String command) {
@@ -64,10 +68,9 @@ public class SubprocessModule extends Module {
     exec(String[] command, boolean combineStderrStdout, Map env, String cwd) {
         Object[] args = new Object[]{command};
         Map kwargs = new HashMap();
-        kwargs.put("stdout", __getattr__("PIPE"));
-        kwargs.put(
-            "stderr", __getattr__(combineStderrStdout ? "STDOUT" : "PIPE"));
-        kwargs.put("stdin", __getattr__("PIPE"));
+        kwargs.put("stdout", PIPE);
+        kwargs.put("stdin", PIPE);
+        kwargs.put("stderr", combineStderrStdout ? STDOUT : PIPE);
         if (cwd != null)
             kwargs.put("cwd", cwd);
         if (env != null)
