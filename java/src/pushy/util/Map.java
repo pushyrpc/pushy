@@ -23,7 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package pushy.internal;
+package pushy.util;
 
 import pushy.PushyObject;
 
@@ -31,18 +31,16 @@ import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
-public class PushyMapObject extends AbstractMap {
+public class Map extends AbstractMap {
     private PushyObject object;
     private PushyObject update;
     private PushyObject get;
     private PushyObject contains;
     private PushyObject values;
  
-    public PushyMapObject(PushyObject object) {
+    public Map(PushyObject object) {
         this.object = object;
         update = (PushyObject)object.__getattr__("update");
         get = (PushyObject)object.__getattr__("get");
@@ -70,7 +68,7 @@ public class PushyMapObject extends AbstractMap {
         return old;
     }
 
-    public void putAll(Map map) {
+    public void putAll(java.util.Map map) {
         update.__call__(new Object[]{map});
     }
 
@@ -98,7 +96,7 @@ class PushyMapEntrySet extends AbstractSet {
     }
 
     public Iterator iterator() {
-        List itemsList = (List)items.__call__();
+        java.util.List itemsList = (java.util.List)items.__call__();
         return new PushyMapEntrySetIterator(itemsList.iterator());
     }
 
@@ -109,8 +107,8 @@ class PushyMapEntrySet extends AbstractSet {
 
 
 class PushyMapEntrySetIterator implements Iterator {
-    private Map map;
-    private Map.Entry current;
+    private java.util.Map map;
+    private java.util.Map.Entry current;
     private Iterator iterator;
 
     public PushyMapEntrySetIterator(Iterator iterator) {
@@ -134,12 +132,12 @@ class PushyMapEntrySetIterator implements Iterator {
     }
 }
 
-class PushyMapEntry implements Map.Entry {
-    private Map map;
+class PushyMapEntry implements java.util.Map.Entry {
+    private java.util.Map map;
     private Object key;
     private Object value;
 
-    public PushyMapEntry(Map map, Object[] pair) {
+    public PushyMapEntry(java.util.Map map, Object[] pair) {
         this.map = map;
         key = pair[0];
         value = pair[1];
@@ -168,8 +166,8 @@ class PushyMapEntry implements Map.Entry {
     }
 
     public boolean equals(Object o) {
-        if (o instanceof Map.Entry) {
-            Map.Entry rhs = (Map.Entry)o;
+        if (o instanceof java.util.Map.Entry) {
+            java.util.Map.Entry rhs = (java.util.Map.Entry)o;
             if (key == null) {
                 if (rhs.getKey() != null)
                     return false;

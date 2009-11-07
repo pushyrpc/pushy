@@ -181,14 +181,7 @@ public class Client
      */
     public Object evaluate(String expression)
     {
-        try
-        {
-            return connection.evaluate(expression);
-        }
-        catch (java.io.IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        return connection.evaluate(expression);
     }
 
     /**

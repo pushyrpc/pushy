@@ -31,8 +31,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public class Connection extends BaseConnection
 {
+    private static final Logger logger =
+        Logger.getLogger(BaseConnection.class.getName());
+
     public Connection(InputStream istream, OutputStream ostream)
     {
         super(istream, ostream);
@@ -42,6 +49,53 @@ public class Connection extends BaseConnection
     createProxy(Number id, Number opmask, Integer type, Object args)
     {
         return Proxy.getProxy(id, opmask, type, args, this);
+    }
+
+    /**
+     * Call this method for "op__xxx___" message type requests.
+     */
+    private Object invokeOperator(Message.Type type, Object object)
+    {
+        try
+        {
+            return sendRequest(type, new Object[]{object});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Call this method for "op__xxx___" message type requests.
+     */
+    private Object
+    invokeOperator(Message.Type type, Object object, Object[] args)
+    {
+        try
+        {
+            return sendRequest(type, new Object[]{object, args});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Call this method for "op__xxx___" message type requests.
+     */
+    private Object
+    invokeOperator(Message.Type type, Object object, Object[] args, Map kwargs)
+    {
+        try
+        {
+            return sendRequest(type, new Object[]{object, args, kwargs});
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     public Object evaluate(String expression)
@@ -88,56 +142,26 @@ public class Connection extends BaseConnection
 
     public Object getitem(Object object, Object index)
     {
-        try
-        {
-            return sendRequest(Message.Type.op__getitem__,
-                               new Object[]{object, index});
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        return invokeOperator(
+                   Message.Type.op__getitem__, object, new Object[]{index});
     }
 
     public void setitem(Object object, Object index, Object value)
     {
-        try
-        {
-            sendRequest(
-                Message.Type.op__setitem__,
-                new Object[]{object, index, value});
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        invokeOperator(
+            Message.Type.op__setitem__, object, new Object[]{index, value});
     }
 
     public int len(Object object)
     {
-        try
-        {
-            Integer length =
-                (Integer)sendRequest(Message.Type.op__len__, object);
-            return length.intValue();
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        Integer length =
+            (Integer)invokeOperator(Message.Type.op__len__, object);
+        return length.intValue();
     }
 
     public Object call(Object object, Object[] args, java.util.Map kwargs)
     {
-        try
-        {
-            return sendRequest(Message.Type.op__call__,
-                               new Object[]{object, args, kwargs});
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        return invokeOperator(Message.Type.op__call__, object, args, kwargs);
     }
 
     public String str(Object object)

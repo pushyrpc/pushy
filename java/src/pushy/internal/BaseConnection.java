@@ -130,10 +130,6 @@ public abstract class BaseConnection
 
     protected Object handle(Message.Type type, Object arg)
     {
-        logger.log(
-            Level.FINE, "Handling message: type={0}, arg={1}",
-            new Object[]{type, arg});
-
         if (type.equals(Message.Type.response))
         {
             return arg;
@@ -145,7 +141,7 @@ public abstract class BaseConnection
             else
                 throw new RemoteException((PushyObject)arg);
         }
-        return null;
+        throw new RuntimeException("Unhandled message type: " + type);
     }
 
     /**
@@ -486,8 +482,17 @@ public abstract class BaseConnection
         {
             int length = Array.getLength(value);
             stream.write('t');
-            for (int i = 0; i < length; ++i)
-                marshal(Array.get(value, i), stream);
+            if (length > 0)
+            {
+                ByteArrayOutputStream partStream =
+                    new ByteArrayOutputStream();
+                for (int i = 0; i < length; ++i, partStream.reset())
+                {
+                    marshal(Array.get(value, i), partStream);
+                    putInt32(partStream.size(), stream);
+                    partStream.writeTo(stream);
+                }
+            }
             return;
         }
 
@@ -520,7 +525,8 @@ public abstract class BaseConnection
         }
 
         // TODO marshal complex local objects
-        throw new UnsupportedOperationException("Cannot marshal Java objects");
+        throw new UnsupportedOperationException(
+                    "Cannot marshal Java object: " + value);
     }
 
     private Object unmarshal(byte[] bytes) throws IOException
@@ -556,7 +562,7 @@ public abstract class BaseConnection
             }
             case 'p': // Remote proxy object.
             {
-                Object value = Marshal.load(stream);
+                Object value = unmarshal(stream);
                 if (value instanceof Object[])
                 {
                     Object[] idParts = (Object[])value;
@@ -567,7 +573,7 @@ public abstract class BaseConnection
                     Number opmask = (Number)idParts[1];
                     Integer objectType = (Integer)idParts[2];
                     if (idParts.length > 3)
-                        arg = unmarshal((byte[])idParts[3]);
+                        arg = idParts[3];
 
                     // Create the proxy object.
                     Object proxy = createProxy(id, opmask, objectType, arg);
@@ -613,6 +619,16 @@ public abstract class BaseConnection
     protected abstract Object
     createProxy(Number id, Number opmask, Integer type, Object args);
 
+    // Write a big-endian 32-bit integer to the stream.
+    private void putInt32(int value, OutputStream stream) throws IOException
+    {
+        stream.write((byte)(value >> 24));
+        stream.write((byte)(value >> 16));
+        stream.write((byte)(value >> 8));
+        stream.write((byte)value);
+    }
+
+    // Read a big-endian 32-bit integer from the stream.
     private int getInt32(InputStream stream) throws IOException
     {
         return ((stream.read() << 24) | (stream.read() << 16) |

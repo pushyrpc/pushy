@@ -375,7 +375,7 @@ class BaseConnection(object):
 
         i = id(obj)
         if i in self.__proxied_objects:
-            return "p" + marshal.dumps(i)
+            return "p" + self.__marshal(i)
         elif i in self.__proxy_ids:
             # Object originates at the peer.
             return "o" + marshal.dumps(self.__proxy_ids[i])
@@ -390,38 +390,37 @@ class BaseConnection(object):
 
             if type(proxy_result) is tuple:
                 obj_type, args = proxy_result
-                dumps_args = \
-                    (i, opmask, int(obj_type), self.__marshal(args))
+                dumps_args = (i, opmask, int(obj_type), args)
             else:
                 obj_type = proxy_result
                 dumps_args = (i, opmask, int(obj_type))
 
             self.__proxied_objects[i] = obj
-            return "p" + marshal.dumps(dumps_args, 0)
+            return "p" + self.__marshal(dumps_args)
 
 
     def __unmarshal(self, payload):
-        if payload.startswith("s"):
+        if payload[0] == "s":
             # Simple type
             return marshal.loads(buffer(payload, 1))
-        elif payload.startswith("t"):
+        elif payload[0] == "t":
             size_size = struct.calcsize(">I")
             payload = buffer(payload, 1)
             parts = []
             while len(payload) > 0:
-                size = struct.unpack(">I", payload[:size_size])[0]
+                size = struct.unpack(">I", buffer(payload, 0, size_size))[0]
                 payload = buffer(payload, size_size)
-                parts.append(self.__unmarshal(payload[:size]))
+                parts.append(self.__unmarshal(buffer(payload, 0, size)))
                 payload = buffer(payload, size)
             return tuple(parts)
-        elif payload.startswith("p"):
+        elif payload[0] == "p":
             # Proxy object
-            id_ = marshal.loads(buffer(payload, 1))
+            id_ = self.__unmarshal(buffer(payload, 1))
             if type(id_) is tuple:
                 # New object: (id, opmask, object_type)
                 args = None
                 if len(id_) >= 4:
-                    args = self.__unmarshal(id_[3])
+                    args = id_[3]
                 p = Proxy(id_[0], id_[1], id_[2], args, self,
                           self.__register_proxy)
 
@@ -454,12 +453,14 @@ class BaseConnection(object):
                         event.wait()
 
                 return self.__proxies[id_]
-        elif payload.startswith("o"):
+        elif payload[0] == "o":
             # The object originated here.
             id_ = marshal.loads(buffer(payload, 1))
-            return self.__proxied_objects[id_]
+            object = self.__proxied_objects[id_]
+            pushy.util.logger.debug("Unmarshal %r: %r", id_, object)
+            return object
         else:
-            raise ValueError, "Invalid payload prefix"
+            raise ValueError, "Invalid payload prefix: %s", payload[0]
 
 
     def __register_proxy(self, proxy, remote_id):

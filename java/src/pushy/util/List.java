@@ -23,22 +23,21 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package pushy.internal;
+package pushy.util;
 
 import pushy.PushyObject;
 
 import java.util.AbstractList;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.ListIterator;
 
-public class PushyListObject extends AbstractList {
+public class List extends AbstractList {
     private PushyObject object;
     private PushyObject insert;
     private PushyObject append;
 
-    public PushyListObject(PushyObject object) {
+    public List(PushyObject object) {
         this.object = object;
         insert = (PushyObject)object.__getattr__("insert");
         append = (PushyObject)object.__getattr__("append");

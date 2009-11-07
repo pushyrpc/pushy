@@ -2,7 +2,9 @@ package pushy;
 
 import junit.framework.TestCase;
 
+import pushy.internal.Message;
 import pushy.modules.*;
+
 import java.io.IOException;
 import java.io.File;
 import java.util.Iterator;
@@ -52,7 +54,28 @@ public class ProtocolTest extends TestCase
 
     public void testProxyObject() {
         Object dirFunction = client.evaluate("dir");
-        System.out.println(dirFunction);
+        assertTrue(dirFunction instanceof PushyObject);
+        Object value = ((PushyObject)dirFunction).__call__();
+        assertTrue(value instanceof List);
+    }
+
+    /**
+     * Make sure the message types in Python match those in Java.
+     */
+    public void testMessageTypes() {
+        Module message = client.getModule("pushy.protocol.message");
+        Object[] types = (Object[])message.__getattr__("message_types");
+        for (int i = 0; i < types.length; ++i)
+        {
+            PushyObject remoteMessageType = (PushyObject)types[i];
+            Message.Type localMessageType = Message.Type.getType(i);
+            if (localMessageType != null)
+            {
+                assertEquals(
+                    remoteMessageType.__getattr__("name"),
+                    localMessageType.getName());
+            }
+        }
     }
 }
 

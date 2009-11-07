@@ -43,10 +43,10 @@ public class Proxy
         //      interfaces to implement.
 
         if (Type.list.equals(type))
-            return new PushyListObject(proxy);
+            return new pushy.util.List(proxy);
 
         if (Type.dictionary.equals(type))
-            return new PushyMapObject(proxy);
+            return new pushy.util.Map(proxy);
 
         return proxy;
     }

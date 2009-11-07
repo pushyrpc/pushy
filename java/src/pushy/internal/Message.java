@@ -127,18 +127,11 @@ public class Message
     public static Message
     unpack(java.io.InputStream stream) throws java.io.IOException
     {
-        // Header is 21 bytes, made up of:
-        //     1 byte  (type)
-        //     8 bytes (source)
-        //     8 bytes (target)
-        //     4 bytes (payload size)
-        byte[] header = read(stream, 21);
-
         // Unpack the header.
-        Type type = Type.getType((int)header[0]);
-        long source = unpackLong(header, 1);
-        long target = unpackLong(header, 9);
-        int length = unpackInteger(header, 17);
+        Type type = Type.getType(stream.read());
+        long source = unpackLong(stream);
+        long target = unpackLong(stream);
+        int length = unpackInteger(stream);
 
         // Read the payload and create the message.
         byte[] payload = read(stream, length);
@@ -184,12 +177,12 @@ public class Message
     }
 
     // Utility method for unpacking a network-order "long" from a byte array.
-    private static long unpackLong(byte[] buf, int offset)
+    private static long
+    unpackLong(java.io.InputStream stream) throws java.io.IOException
     {
-        return (((long)buf[offset+0]) << 56) | (((long)buf[offset+1]) << 48) |
-               (((long)buf[offset+2]) << 40) | (((long)buf[offset+3]) << 32) |
-               (((long)buf[offset+4]) << 24) | (((long)buf[offset+5]) << 16) |
-               (((long)buf[offset+6]) << 8)  | (((long)buf[offset+7]));
+        long hi4 = (long)unpackInteger(stream);
+        long lo4 = (long)unpackInteger(stream);
+        return (hi4 << 4) | lo4;
     }
 
     // Utility method for packing a network-order "int" into a byte array.
@@ -203,10 +196,14 @@ public class Message
     }
 
     // Utility method for unpacking a network-order "int" from a byte array.
-    private static int unpackInteger(byte[] buf, int offset)
+    private static int
+    unpackInteger(java.io.InputStream stream) throws java.io.IOException
     {
-        return (((int)buf[offset+0]) << 24) | (((int)buf[offset+1]) << 16) |
-               (((int)buf[offset+2]) << 8)  | (((int)buf[offset+3]) << 0);
+        int b0 = stream.read();
+        int b1 = stream.read();
+        int b2 = stream.read();
+        int b3 = stream.read();
+        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
     }
 
     /**
@@ -258,6 +255,8 @@ public class Message
         private static List types = new ArrayList();
         public static Type getType(int code)
         {
+            if (code < 0 || code >= types.size())
+                return null;
             return (Type)types.get(code);
         }
 

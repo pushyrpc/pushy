@@ -90,17 +90,37 @@ class Connection(BaseConnection):
         # Copy the *args and **kwargs. In particular, the **kwargs dict
         # must be a real dict, because Python will do a PyDict_CheckExact
         # somewhere along the line.
-        args, kwargs = list(args), dict(kwargs)
+        if args is None:
+            args = []
+        else:
+            args = list(args)
+        if kwargs is None:
+            kwargs = {}
+        else:
+            kwargs = dict(kwargs)
         result = object(*args, **kwargs)
         return result
 
-    def __handle_operator(self, type, args):
-        (object, args, kwargs) = args
+    def __handle_operator(self, type, args_):
+        object = args_[0]
+        args = None
+        kwargs = None
+        if len(args_) > 1:
+            args = args_[1]
+            if len(args_) > 2:
+                kwargs = args_[2]
 
         # Copy the *args and **kwargs. In particular, the **kwargs dict
         # must be a real dict, because Python will do a PyDict_CheckExact
         # somewhere along the line.
-        args, kwargs = list(args), dict(kwargs)
+        if args is None:
+            args = []
+        else:
+            args = list(args)
+        if kwargs is None:
+            kwargs = {}
+        else:
+            kwargs = dict(kwargs)
 
         # TODO handle slot pointer methods specially?
         name = type.name[2:]

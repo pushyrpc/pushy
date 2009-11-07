@@ -38,7 +38,7 @@ public class RemoteException extends RuntimeException
 
     RemoteException(PushyObject object)
     {
-        super("Remote Exception");
+        super(object.toString());
         this.object = object;
     }
 }

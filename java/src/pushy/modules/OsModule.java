@@ -28,7 +28,6 @@ package pushy.modules;
 import pushy.Client;
 import pushy.PushyObject;
 import pushy.Module;
-import pushy.PushyMapObject;
 
 import java.util.List;
 import java.util.Map;
@@ -70,7 +69,7 @@ public class OsModule extends Module {
         sep = (String)__getattr__("sep");
         pathsep = (String)__getattr__("pathsep");
         linesep = (String)__getattr__("linesep");
-        environ = (Map)__getattr__("environ");
+        environ = new pushy.util.Map((PushyObject)__getattr__("environ"));
     }
 
     public PushyObject stat(String path) {

@@ -198,4 +198,5 @@ for i,t in enumerate(message_names):
     m = MessageType(i, t)
     message_types.append(m)
     setattr(MessageType, t, m)
+message_types = tuple(message_types)
 

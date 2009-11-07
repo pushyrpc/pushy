@@ -94,9 +94,8 @@ public class FileOutputStream extends OutputStream {
     }
 
     public void write(byte[] b, int offset, int length) throws IOException {
-        byte[] newbytes = new byte[length];
-        System.arraycopy(b, offset, newbytes, 0, length);
-        writeMethod.__call__(new Object[]{newbytes});
+        writeMethod.__call__(
+            new Object[]{new String(b, offset, length, "ISO-8859-1")});
     }
 
     public void write(byte[] b) throws IOException {
