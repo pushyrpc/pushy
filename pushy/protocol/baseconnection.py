@@ -23,7 +23,7 @@
 
 import logging, marshal, os, struct, sys, thread, threading
 from pushy.protocol.message import Message, MessageType, message_types
-from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
+from pushy.protocol.proxy import Proxy, ProxyType
 import pushy.util
 
 
@@ -147,6 +147,27 @@ class BaseConnection(object):
     def __del__(self):
         if self.__open:
             self.close()
+
+
+    def __log_state(self):
+        state_format = """
+Connection State
+------------------------
+ID:                   %r
+Open:                 %r
+Receiving:            %r
+Processing Count:     %r
+Waiting Count:        %r
+Response Count:       %r
+Request Count:        %r
+Thread Request Count: %r
+Peer Thread:          %r
+        """.strip()
+        state_args = (self.__connid, self.__open, self.__receiving,
+                      self.__processing, self.__waiting, self.__responses,
+                      len(self.__requests), self.__thread_request_count,
+                      self.__peer_thread)
+        pushy.util.logger.debug("\n"+state_format, *state_args)
 
 
     # Property for determining the number of requests the current thread is
@@ -284,8 +305,10 @@ class BaseConnection(object):
                     self.__responses > 0 or \
                      (self.__processing > 0 and \
                       (self.__processing > self.__waiting))):
+                self.__log_state()
                 self.__processing_condition.notify()
                 self.__processing_condition.wait()
+            self.__log_state()
 
             # Check if the connection is still open.
             if not self.__open:
@@ -336,8 +359,10 @@ class BaseConnection(object):
                    (self.__receiving or \
                     (self.__processing > 0 and \
                      (self.__processing > self.__waiting))):
+                self.__log_state()
                 self.__processing_condition.notify()
                 self.__processing_condition.wait()
+            self.__log_state()
 
             # Wait until we've got a response message.
             if handler.message is None and self.__open:
@@ -408,9 +433,13 @@ class BaseConnection(object):
             #
             # opmask is a bitmask defining whether or not the object
             # defines various methods (__add__, __iter__, etc.)
-            opmask = get_opmask(obj)
+            opmask = ProxyType.getoperators(obj)
             proxy_type = ProxyType.get(obj)
             args = ProxyType.getargs(proxy_type, obj)
+
+            pushy.util.logger.debug(
+                "Marshalling object: %r, %r, %r",
+                i, opmask, proxy_type)
 
             self.__proxied_objects[i] = obj
             return "p" + self.__marshal((i, opmask, int(proxy_type), args))
@@ -434,6 +463,10 @@ class BaseConnection(object):
             # Proxy object
             id_ = self.__unmarshal(buffer(payload, 1))
             if type(id_) is tuple:
+                pushy.util.logger.debug(
+                    "Unmarshalling object: %r, %r, %r",
+                    id_[0], id_[1], id_[2])
+
                 # New object: (id, opmask, object_type, args)
                 p = Proxy(id_[0], id_[1], id_[2], id_[3], self,
                           self.__register_proxy)
@@ -471,7 +504,6 @@ class BaseConnection(object):
             # The object originated here.
             id_ = marshal.loads(buffer(payload, 1))
             object = self.__proxied_objects[id_]
-            pushy.util.logger.debug("Unmarshal %r: %r", id_, object)
             return object
         else:
             raise ValueError, "Invalid payload prefix: %s", payload[0]
@@ -539,6 +571,7 @@ class BaseConnection(object):
                 # An exception raised while handling an exception message
                 # should be sent up to the caller.
                 if m.type is MessageType.exception:
+                    pushy.util.logger.debug("Raising exception")
                     raise e
 
                 # Allow the message receiving thread to proceed.
@@ -551,8 +584,8 @@ class BaseConnection(object):
                     self.__processing_condition.release()
 
                 # Send the above three objects to the caller
-                pushy.util.logger.debug(
-                    "Throwing an exception", exc_info=sys.exc_info())
+                #pushy.util.logger.debug(
+                #    "Sending back an exception", exc_info=sys.exc_info())
                 self.__send_message(MessageType.exception, e)
         finally:
             if is_request:

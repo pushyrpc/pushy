@@ -43,8 +43,11 @@ class ProxyType:
 
     @staticmethod
     def get(obj):
-        if hasattr(obj, "proxy_type"):
-            return obj.proxy_type
+        # First check if it's a class
+        class_ = type(obj)
+        if hasattr(class_, "pushy_proxy_type"):
+            return class_.pushy_proxy_type
+
         if isinstance(obj, Exception):
             return ProxyType.exception
         if isinstance(obj, dict):
@@ -72,21 +75,21 @@ class ProxyType:
             return args
         elif proxy_type in (ProxyType.list, ProxyType.set):
             return tuple(obj)
-
         return None
 
-
-def get_opmask(obj):
-    if hasattr(obj, "operator_mask"):
-        return obj.operator_mask
-    else:
-        mask = 0L
-        for t in message_types:
-            if t.name.startswith("op__"):
-                mask <<= 1
-                if hasattr(obj, t.name[2:]):
-                    mask = mask + 1
-        return mask
+    @staticmethod
+    def getoperators(obj):
+        class_ = type(obj)
+        if hasattr(class_, "pushy_operator_mask"):
+            return class_.pushy_operator_mask
+        else:
+            mask = 0L
+            for t in message_types:
+                if t.name.startswith("op__"):
+                    mask <<= 1
+                    if hasattr(obj, t.name[2:]):
+                        mask = mask + 1
+            return mask
 
 
 def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
@@ -105,10 +108,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 BaseException.__init__(self)
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
@@ -120,10 +119,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 else:
                     dict.__init__(self)
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = DictionaryProxy
     elif proxy_type == ProxyType.list:
@@ -132,10 +127,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 list.__init__(self, args)
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = ListProxy
     elif proxy_type == ProxyType.set:
@@ -144,10 +135,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 set.__init__(self, args)
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
@@ -156,10 +143,6 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 types.ModuleType.__init__(self, "")
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = ModuleProxy
     else:
@@ -168,17 +151,17 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 object.__init__(self)
             def __getattribute__(self, name):
-                if name == "operator_mask":
-                    return opmask
-                elif name == "proxy_type":
-                    return proxy_type
-                else:
-                    try:
-                        return conn.getattr(self, name)
-                    except:
-                        return object.__getattribute__(self, name)
- 
+                return conn.getattr(self, name)
         ProxyClass = ObjectProxy
+
+    # Store the operator mask and proxy type in the class. This will be used by
+    # ProxyType.getoperators() and ProxyType.get()
+    #
+    # XXX Important! Without this, the performance of tunnelled connections is
+    #                unusably slow due to the chatter induced by many calls to
+    #                hasattr/getattr.
+    ProxyClass.pushy_operator_mask = opmask
+    ProxyClass.pushy_proxy_type = proxy_type
 
     # Callable for delegating to an operator on the remote object.
     class Operator:
@@ -224,6 +207,18 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     for operator in operators:
         operator.object = proxy
     return proxy
+
+
+###############################################################################
+# A class for storing a proxy object along with its operator mask and proxy-
+# type.
+###############################################################################
+
+class ProxyObject(object):
+    def __init__(self, proxy, operator_mask, proxy_type):
+        self.proxy = proxy
+        self.operator_mask = operator_mask
+        self.proxy_type = proxy_type
 
 ###############################################################################
 # Create enumeration of proxy types

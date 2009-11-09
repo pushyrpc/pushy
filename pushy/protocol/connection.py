@@ -24,7 +24,6 @@
 from pushy.protocol.baseconnection import BaseConnection
 import logging, marshal, os, struct, threading
 from pushy.protocol.message import Message, MessageType, message_types
-from pushy.protocol.proxy import Proxy, ProxyType, get_opmask
 import pushy.util
 import platform
 
