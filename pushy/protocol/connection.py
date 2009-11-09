@@ -48,8 +48,9 @@ class Connection(BaseConnection):
             if message_type.name.startswith("op__"):
                 self.message_handlers[message_type] = self.__handle_operator
 
-    def eval(self, expression):
-        return self.send_request(MessageType.evaluate, expression)
+    def eval(self, expression, globals=None, locals=None):
+        args = (expression, globals, locals)
+        return self.send_request(MessageType.evaluate, args)
 
     def operator(self, type_, object, args, kwargs):
         return self.send_request(
@@ -81,8 +82,9 @@ class Connection(BaseConnection):
     def __handle_getrepr(self, type, object):
         return repr(object)
 
-    def __handle_evaluate(self, type_, expression):
-        return eval(expression)
+    def __handle_evaluate(self, type_, args):
+        (expression, globals, locals) = args
+        return eval(expression, globals, locals)
 
     def __handle_call(self, type_, args_):
         (object, args, kwargs) = args_

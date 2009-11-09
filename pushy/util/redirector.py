@@ -22,6 +22,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import os, sys, threading
+import pushy.util
 
 class OutputRedirector(threading.Thread):
     """
@@ -40,6 +41,7 @@ class OutputRedirector(threading.Thread):
 
     def run(self):
         try:
+            pushy.util.logger.debug("Entered output redirector")
             try:
                 data = os.read(self.__fileno, self.__bufsize)
                 while len(data) > 0:
@@ -48,6 +50,7 @@ class OutputRedirector(threading.Thread):
             finally:
                 self.getfile().flush()
         except:
+            pushy.util.logger.debug("Leaving output redirector")
             pass
 
 class StdoutRedirector(OutputRedirector):

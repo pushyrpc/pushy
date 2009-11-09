@@ -73,6 +73,19 @@ class ResponseHandler:
         self.thread      = thread.get_ident()
 
 
+connection_count_lock = threading.Lock()
+connection_count = 0
+def get_connection_id():
+    global connection_count
+    connection_count_lock.acquire()
+    try:
+        connection_id = connection_count
+        connection_count += 1
+        return connection_id
+    finally:
+        connection_count_lock.release()
+
+
 class BaseConnection(object):
     def __init__(self, istream, ostream, initiator=True):
         self.__open           = True
@@ -82,7 +95,7 @@ class BaseConnection(object):
         self.__istream_lock   = threading.Lock()
         self.__ostream_lock   = threading.Lock()
         self.__unmarshal_lock = threading.Lock()
-        self.__pid            = os.getpid() # Record pid in event of a fork
+        self.__connid         = get_connection_id()
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
@@ -110,8 +123,15 @@ class BaseConnection(object):
         self.__processing_condition = threading.Condition(threading.Lock())
 
         # Uncomment the following for debugging.
-        #self.__istream = LoggingFile(istream, open("%d.in"%os.getpid(),"wb"))
-        #self.__ostream = LoggingFile(ostream, open("%d.out"%os.getpid(),"wb"))
+        if False:
+            self.__istream = \
+                LoggingFile(
+                    istream,
+                    open("%d-%d.in"% (os.getpid(), self.__connid), "wb"))
+            self.__ostream = \
+                LoggingFile(
+                    ostream,
+                    open("%d-%d.out" % (os.getpid(), self.__connid),"wb"))
 
         # (Client) Contains mapping of id(obj) -> proxy
         self.__proxies = {}
@@ -198,21 +218,23 @@ class BaseConnection(object):
     def send_request(self, message_type, args):
         "Send a request message and wait for a response."
 
-        # Create a new response handler.
-        handler = ResponseHandler(self.__processing_condition)
-
         # If a request is being processed, then increase the 'waiting' count,
         # so other threads may attempt to receive messages.
         self.__processing_condition.acquire()
         try:
             if not self.__open:
                 raise Exception, "Connection is closed"
+
+            handler = self.__response_handlers.get(thread.get_ident(), None)
+            if handler is None:
+                handler = ResponseHandler(self.__processing_condition)
+                self.__response_handlers[handler.thread] = handler
+
             if self.__thread_request_count > 0:
                 self.__waiting += 1
                 if self.__processing == self.__waiting:
                     self.__processing_condition.notify()
         finally:
-            self.__response_handlers[handler.thread] = handler
             self.__processing_condition.release()
 
         # Send the message.
@@ -226,7 +248,8 @@ class BaseConnection(object):
                     self.__handle(m)
                 m = self.__waitForResponse(handler)
         finally:
-            del self.__response_handlers[handler.thread]
+            if self.__thread_request_count == 0:
+                del self.__response_handlers[handler.thread]
         return self.__handle(m)
 
 
@@ -293,11 +316,11 @@ class BaseConnection(object):
                     return m
             finally:
                 self.__processing_condition.acquire()
+                self.__receiving = False
                 if notifyAll:
                     self.__processing_condition.notifyAll()
                 else:
                     self.__processing_condition.notify()
-                self.__receiving = False
         finally:
             self.__processing_condition.release()
             pushy.util.logger.debug("Leave waitForRequest")
@@ -381,22 +404,16 @@ class BaseConnection(object):
             return "o" + marshal.dumps(self.__proxy_ids[i])
         else:
             # Create new entry in proxy objects map:
-            #    id -> (obj, refcount, opmask[, args])
+            #    id -> (obj, refcount, opmask, args)
             #
             # opmask is a bitmask defining whether or not the object
             # defines various methods (__add__, __iter__, etc.)
             opmask = get_opmask(obj)
-            proxy_result = ProxyType.get(obj)
-
-            if type(proxy_result) is tuple:
-                obj_type, args = proxy_result
-                dumps_args = (i, opmask, int(obj_type), args)
-            else:
-                obj_type = proxy_result
-                dumps_args = (i, opmask, int(obj_type))
+            proxy_type = ProxyType.get(obj)
+            args = ProxyType.getargs(proxy_type, obj)
 
             self.__proxied_objects[i] = obj
-            return "p" + self.__marshal(dumps_args)
+            return "p" + self.__marshal((i, opmask, int(proxy_type), args))
 
 
     def __unmarshal(self, payload):
@@ -417,11 +434,8 @@ class BaseConnection(object):
             # Proxy object
             id_ = self.__unmarshal(buffer(payload, 1))
             if type(id_) is tuple:
-                # New object: (id, opmask, object_type)
-                args = None
-                if len(id_) >= 4:
-                    args = id_[3]
-                p = Proxy(id_[0], id_[1], id_[2], args, self,
+                # New object: (id, opmask, object_type, args)
+                p = Proxy(id_[0], id_[1], id_[2], id_[3], self,
                           self.__register_proxy)
 
                 # Wake anyone waiting on this ID to be unmarshalled.
@@ -473,7 +487,8 @@ class BaseConnection(object):
     def __send_message(self, message_type, args):
         thread_id = self.__peer_thread
         m = Message(message_type, self.__marshal(args), thread_id)
-        pushy.util.logger.debug("Sending %r (%r)", m, thread_id)
+        pushy.util.logger.debug("[%r] Sending %r (%r)",
+                                self.__connid, m, thread_id)
         bytes = m.pack()
         self.__ostream_lock.acquire()
         try:
@@ -497,7 +512,7 @@ class BaseConnection(object):
 
 
     def __handle(self, m):
-        pushy.util.logger.debug("Handling message: %r", m)
+        pushy.util.logger.debug("[%r] Handling message: %r", self.__connid, m)
 
         # Track the number of requests being processed in this thread. May be
         # greater than one, if there is to-and-fro. We need to track this so
@@ -505,7 +520,7 @@ class BaseConnection(object):
         is_request = m.type not in response_types
         if is_request:
             self.__thread_request_count += 1
-            if self.__thread_local.request_count == 1:
+            if self.__thread_request_count == 1:
                 self.__peer_thread = m.source
 
         try:
@@ -518,7 +533,9 @@ class BaseConnection(object):
             except SystemExit, e:
                 self.__send_response(e.code)
                 raise e
-            except Exception, e:
+            except:
+                e = sys.exc_info()[1]
+
                 # An exception raised while handling an exception message
                 # should be sent up to the caller.
                 if m.type is MessageType.exception:
@@ -539,8 +556,8 @@ class BaseConnection(object):
                 self.__send_message(MessageType.exception, e)
         finally:
             if is_request:
-                self.__thread_local.request_count -= 1
-                if self.__thread_local.request_count == 0:
+                self.__thread_request_count -= 1
+                if self.__thread_request_count == 0:
                     self.__peer_thread = 0
 
 

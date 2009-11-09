@@ -139,7 +139,7 @@ print sys.stdin.read()
     new_env["ARARARARAR"] = "1231231231312"
 
     proc = Popen(["python", "-c", program],
-                 "pramd0nk",
+                 "blahblah",
                  stdin=subprocess.PIPE,
                  stdout=subprocess.PIPE,
                  env=new_env)

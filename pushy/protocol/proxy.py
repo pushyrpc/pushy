@@ -43,32 +43,50 @@ class ProxyType:
 
     @staticmethod
     def get(obj):
+        if hasattr(obj, "proxy_type"):
+            return obj.proxy_type
         if isinstance(obj, Exception):
-            if obj.__class__.__module__ == "exceptions":
-                return ProxyType.exception, obj.__class__.__name__
             return ProxyType.exception
         if isinstance(obj, dict):
-            args = None
-            if len(obj) > 0:
-                args = tuple(obj.items())
-            return (ProxyType.dictionary, args)
+            return ProxyType.dictionary
         if isinstance(obj, list):
-            return (ProxyType.list, tuple(obj))
+            return ProxyType.list
         if isinstance(obj, set):
-            return (ProxyType.list, tuple(obj))
+            return ProxyType.list
         if isinstance(obj, types.ModuleType):
             return ProxyType.module
         return ProxyType.object
 
+    @staticmethod
+    def getargs(proxy_type, obj):
+        if type(proxy_type) is int:
+            proxy_type = proxy_types[proxy_type]
+        if proxy_type is ProxyType.exception:
+            module_ = obj.__class__.__module__
+            if module_ == "exceptions":
+                return obj.__class__.__name__
+        elif proxy_type is ProxyType.dictionary:
+            args = None
+            if len(obj) > 0:
+                args = tuple(obj.items())
+            return args
+        elif proxy_type in (ProxyType.list, ProxyType.set):
+            return tuple(obj)
+
+        return None
+
 
 def get_opmask(obj):
-    mask = 0L
-    for t in message_types:
-        if t.name.startswith("op__"):
-            if hasattr(obj, t.name[2:]):
-                mask = mask + 1
-            mask <<= 1
-    return (mask >> 1)
+    if hasattr(obj, "operator_mask"):
+        return obj.operator_mask
+    else:
+        mask = 0L
+        for t in message_types:
+            if t.name.startswith("op__"):
+                mask <<= 1
+                if hasattr(obj, t.name[2:]):
+                    mask = mask + 1
+        return mask
 
 
 def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
@@ -85,10 +103,13 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
         class ExceptionProxy(BaseException):
             def __init__(self):
                 on_proxy_init(self, id_)
-                pushy.util.logger.debug("Initialising exception")
                 BaseException.__init__(self)
-                pushy.util.logger.debug("Initialised exception")
-            def __getattribute__(self, name): return conn.getattr(self, name)
+            def __getattribute__(self, name):
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
+                return conn.getattr(self, name)
         ProxyClass = ExceptionProxy
     elif proxy_type == ProxyType.dictionary:
         class DictionaryProxy(dict):
@@ -99,6 +120,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 else:
                     dict.__init__(self)
             def __getattribute__(self, name):
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = DictionaryProxy
     elif proxy_type == ProxyType.list:
@@ -107,6 +132,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 list.__init__(self, args)
             def __getattribute__(self, name):
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = ListProxy
     elif proxy_type == ProxyType.set:
@@ -115,6 +144,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 set.__init__(self, args)
             def __getattribute__(self, name):
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = SetProxy
     elif proxy_type == ProxyType.module:
@@ -123,6 +156,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 types.ModuleType.__init__(self, "")
             def __getattribute__(self, name):
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
                 return conn.getattr(self, name)
         ProxyClass = ModuleProxy
     else:
@@ -131,7 +168,16 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                 on_proxy_init(self, id_)
                 object.__init__(self)
             def __getattribute__(self, name):
-                return conn.getattr(self, name)
+                if name == "operator_mask":
+                    return opmask
+                elif name == "proxy_type":
+                    return proxy_type
+                else:
+                    try:
+                        return conn.getattr(self, name)
+                    except:
+                        return object.__getattribute__(self, name)
+ 
         ProxyClass = ObjectProxy
 
     # Callable for delegating to an operator on the remote object.
@@ -139,6 +185,8 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
         def __init__(self, type_):
             self.type_ = type_
             self.object = None
+        def __repr__(self):
+            return repr(self.type_)
         def __call__(self, *args, **kwargs):
             return conn.operator(self.type_, self.object, args, kwargs)
 

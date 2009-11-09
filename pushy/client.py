@@ -249,15 +249,38 @@ def pushy_server(stdin, stdout):
         stdin.close()
 
 ###############################################################################
+# Auto-import object.
 
-class AutoImporter:
+# Define a remote function which we'll use to import modules, to avoid lots of
+# exception passing due to misuse of "getattr" on the AutoImporter.
+quiet_import = """
+def quiet_import(name):
+    try:
+        return __import__(name)
+    except ImportError:
+        return None
+""".strip()
+
+class AutoImporter(object):
     "RPyc-inspired automatic module importer."
 
     def __init__(self, client):
         self.__client = client
+        locals = {}
+
+        remote_compile = self.__client.eval("compile")
+        code = remote_compile(quiet_import, "", "exec")
+        self.__client.eval(code, locals=locals)
+        self.__import = locals["quiet_import"]
+
     def __getattr__(self, name):
-        res = self.__client.eval("__import__('%s')" % name)
-        return res
+        try:
+            value = self.__import(name)
+            if value is not None:
+                return value
+        except:
+            pass
+        return object.__getattribute__(self, name)
 
 ###############################################################################
 
@@ -461,8 +484,8 @@ class PushyClient:
         except:
             pass
 
-    def eval(self, code):
-        return self.remote.eval(code)
+    def eval(self, code, globals=None, locals=None):
+        return self.remote.eval(code, globals, locals)
 
     def close(self):
         if self.remote is not None:

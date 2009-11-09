@@ -79,6 +79,8 @@ public class Client
 
     private Process pushyServer;
     private Connection connection;
+    private PushyObject remoteConnection;
+    private PushyObject remoteEvaluate;
     private Map modules = new HashMap();
     private RemoteSystem system;
 
@@ -117,6 +119,18 @@ public class Client
             // Create the connection.
             connection = new Connection(pushyServer.getInputStream(),
                                         pushyServer.getOutputStream());
+
+            // If the address is non-local, create a connection in the local
+            // connection.
+            PushyObject pushyModule =
+                (PushyObject)connection.evaluate(
+                    "__import__('pushy')", null, null);
+            PushyObject connectMethod =
+                (PushyObject)pushyModule.__getattr__("connect");
+            remoteConnection =
+                (PushyObject)connectMethod.__call__(
+                    new Object[]{address}, properties);
+            remoteEvaluate = (PushyObject)remoteConnection.__getattr__("eval");
         }
         catch (Throwable e)
         {
@@ -181,7 +195,24 @@ public class Client
      */
     public Object evaluate(String expression)
     {
-        return connection.evaluate(expression);
+        return evaluate(expression, null);
+    }
+
+    /**
+     * Evaluate an expression.
+     */
+    public Object evaluate(String expression, Map locals)
+    {
+        return evaluate(expression, locals, null);
+    }
+
+    /**
+     * Evaluate an expression.
+     */
+    public Object evaluate(String expression, Map locals, Map globals)
+    {
+        return remoteEvaluate.__call__(
+                   new Object[]{expression, locals, globals});
     }
 
     /**

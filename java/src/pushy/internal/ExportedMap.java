@@ -29,6 +29,7 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 public class ExportedMap extends ExportedObject
@@ -61,10 +62,24 @@ public class ExportedMap extends ExportedObject
             }
         });
 
+        // items()
+        methods.put("items", new Callable() {
+            public Object call(Object[] args, Map kwargs) {
+                List items = new ArrayList();
+                for (Iterator iter = getMap().entrySet().iterator();
+                     iter.hasNext();)
+                {
+                    Map.Entry entry = (Map.Entry)iter.next();
+                    items.add(new Object[]{entry.getKey(), entry.getValue()});
+                }
+                return items;
+            }
+        });
+
         // update()
         methods.put("update", new Callable() {
             public Object call(Object[] args, Map kwargs) {
-                Map map = (Map)getObject();
+                Map map = getMap();
                 if (args != null && args.length == 1)
                 {
                     if (args[0] instanceof Map)

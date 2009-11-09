@@ -75,6 +75,7 @@ class Message:
 
     @staticmethod
     def unpack(file):
+        # Read the message header.
         data = ""
         while len(data) < Message.PACKING_SIZE:
             try:
@@ -87,13 +88,19 @@ class Message:
         (type, source, target, length) = \
             struct.unpack(Message.PACKING_FORMAT, data)
         type = message_types[type]
+
+        # Read message payload.
+        payload = ""
         if length:
-            payload = file.read(length)
-            if len(payload) != length:
-                raise Exception, "%d != %d" % (len(payload), length)
-            assert len(payload) == length
-        else:
-            payload = ""
+            while len(payload) < length:
+                try:
+                    partial = file.read(length - len(payload))
+                except Exception, e:
+                    raise IOError, e
+                if partial == "":
+                    raise IOError, "End of file"
+                payload += partial
+
         pushy.util.logger.debug(
             "Read %d, %r %r", len(data) + len(payload),
             data + payload, (type, source, target, length))

@@ -201,19 +201,18 @@ public abstract class BaseConnection
             if (!open)
                 throw new RuntimeException("Connection is closed");
 
-            if (getThreadRequestCount() > 0)
-            {
-                handler = (ResponseHandler)responseHandlers.get(
-                              new Long(ThreadId.getThreadId()));
-                if (processingCount == ++waitingCount)
-                    processingCondition.notify();
-            }
-            else
+            Long threadId = new Long(ThreadId.getThreadId());
+            handler = (ResponseHandler)responseHandlers.get(threadId);
+            if (handler == null)
             {
                 handler = new ResponseHandler();
-                assert !responseHandlers.containsKey(
-                           new Long(handler.getThreadId()));
                 responseHandlers.put(new Long(handler.getThreadId()), handler);
+            }
+
+            if (getThreadRequestCount() > 0)
+            {
+                if (processingCount == ++waitingCount)
+                    processingCondition.notify();
             }
         }
 
@@ -643,17 +642,15 @@ public abstract class BaseConnection
             case 'p': // Remote proxy object.
             {
                 Object value = unmarshal(stream);
-                if (value instanceof Object[])
+                if (value.getClass().isArray())
                 {
-                    Object[] idParts = (Object[])value;
-
                     // Split apart the id.
                     Object arg = null;
-                    Number id = (Number)idParts[0];
-                    Number opmask = (Number)idParts[1];
-                    Integer objectType = (Integer)idParts[2];
-                    if (idParts.length > 3)
-                        arg = idParts[3];
+                    Number id = (Number)Array.get(value, 0);
+                    Number opmask = (Number)Array.get(value, 1);
+                    Integer objectType = (Integer)Array.get(value, 2);
+                    if (Array.getLength(value) > 3)
+                        arg = Array.get(value, 3);
 
                     // Create the proxy object.
                     Object proxy = createProxy(id, opmask, objectType, arg);

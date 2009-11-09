@@ -114,11 +114,12 @@ public class Connection extends BaseConnection
         }
     }
 
-    public Object evaluate(String expression)
+    public Object evaluate(String expression, Map locals, Map globals)
     {
         try
         {
-            return sendRequest(Message.Type.evaluate, expression);
+            return sendRequest(Message.Type.evaluate,
+                               new Object[]{expression, locals, globals});
         }
         catch (IOException e)
         {
