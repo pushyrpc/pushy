@@ -127,6 +127,11 @@ public abstract class BaseConnection
             sendMessage(Message.Type.exception, e);
             return null;
         }
+        catch (Throwable e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
         finally
         {
             if (isRequest)
@@ -506,6 +511,9 @@ public abstract class BaseConnection
             return;
         }
 
+        if (!(value instanceof PushyObject))
+            logger.log(Level.FINEST, "Marshalling object: {0}", value);
+
         // Marshal array in the same way as Python tuples.
         if (value.getClass().isArray())
         {
@@ -587,12 +595,7 @@ public abstract class BaseConnection
                 proxiedObjects.put(value, eo);
                 proxiedObjectIds.put(id, eo);
 
-                Object[] args;
-                if (proxyArg == null)
-                    args = new Object[]{id, operators, typeCode};
-                else
-                    args = new Object[]{id, operators, typeCode, proxyArg};
-
+                Object[] args = new Object[]{id, operators, typeCode, proxyArg};
                 stream.write('p');
                 marshal(args, stream);
                 return;

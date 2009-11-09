@@ -157,8 +157,7 @@ public class Proxy
         }
         else if (type.equals(Type.list) || type.equals(Type.set))
         {
-            Collection collection = (Collection)object;
-            return collection.toArray(new Object[]{});
+            return ((Collection)object).toArray(new Object[]{});
         }
         return null;
     }

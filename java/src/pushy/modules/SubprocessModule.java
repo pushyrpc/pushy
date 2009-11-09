@@ -27,6 +27,7 @@ package pushy.modules;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Iterator;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,6 +38,7 @@ import pushy.io.FileOutputStream;
 import pushy.Module;
 
 public class SubprocessModule extends Module {
+    private Client client;
     private OsModule osModule;
     private SignalModule signalModule;
     private PushyObject Popen;
@@ -45,6 +47,7 @@ public class SubprocessModule extends Module {
 
     public SubprocessModule(Client client) {
         super(client, "subprocess");
+        this.client = client;
         osModule = (OsModule)client.getModule("os");
         signalModule = (SignalModule)client.getModule("signal");
         Popen = __getmethod__("Popen");
@@ -71,10 +74,39 @@ public class SubprocessModule extends Module {
         kwargs.put("stdout", PIPE);
         kwargs.put("stdin", PIPE);
         kwargs.put("stderr", combineStderrStdout ? STDOUT : PIPE);
+
+        // Set the current working directory.
         if (cwd != null)
-            kwargs.put("cwd", cwd);
+            kwargs.put("cwd", (String)cwd);
+
+        // Set the environment variables for the remote process. We will create
+        // a remote dictionary and copy our entries into it, so the subprocess
+        // doesn't try to access objects from our map.
         if (env != null)
-            kwargs.put("env", env);
+        {
+            Map remoteEnv = (Map)client.evaluate("{}");
+            for (Iterator iter = env.entrySet().iterator(); iter.hasNext();)
+            {
+                Map.Entry entry = (Map.Entry)iter.next();
+                Object key = entry.getKey();
+                Object value = entry.getValue();
+                if (!(key instanceof String))
+                {
+                    throw new IllegalArgumentException(
+                                  "Non-string found in environment map: " +
+                                   key);
+                }
+                if (!(value instanceof String))
+                {
+                    throw new IllegalArgumentException(
+                                  "Non-string found in environment map: " +
+                                   value);
+                }
+            }
+            remoteEnv.putAll(env);
+            kwargs.put("env", remoteEnv);
+        }
+
         PushyObject popen = (PushyObject)Popen.__call__(args, kwargs);
         return new JPushyProcess(popen, osModule, signalModule,
                                  combineStderrStdout);

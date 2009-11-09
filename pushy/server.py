@@ -26,7 +26,7 @@ This module provides functions for starting a Pushy server within an existing
 Python process.
 """
 
-import asyncore, socket, threading
+import asyncore, os, socket, sys, threading
 
 __all__ = ["DEFAULT_PORT", "serve_forever", "run"]
 
@@ -50,6 +50,61 @@ def serve_forever(stdin, stdout):
     finally:
         pushy.util.logger.debug("Closing connection")
         c.close()
+
+
+# Define a function for making a file descriptor's mode binary.
+try:
+    import msvcrt
+    def try_set_binary(fd):
+        msvcrt.setmode(fd, os.O_BINARY)
+except ImportError:
+    try_set_binary = lambda fd: None
+
+
+def serve_stdio_forever(stdin=sys.stdin, stdout=sys.stdout):
+    """
+    Serve forever on the stdio files.
+
+    This will replace the stdin/stdout/stderr file handles with pipes,
+    and then creates threads to poll these pipes in the background and
+    redirect them to sys.stdin/sys.stdout/sys.stderr.
+    """
+
+    STDIN_FILENO  = 0
+    STDOUT_FILENO = 1
+    STDERR_FILENO = 2
+
+    # Redirect stdout/stderr. We will redirect stdout/stderr to
+    # /dev/null to start with, but this behaviour can be overridden
+    # by assigning a different file to os.stdout/os.stderr.
+    import pushy.util
+    (so_r, so_w) = os.pipe()
+    (se_r, se_w) = os.pipe()
+    os.dup2(so_w, STDOUT_FILENO)
+    os.dup2(se_w, STDERR_FILENO)
+    for f in (so_r, so_w, se_r, se_w):
+        try_set_binary(f)
+    os.close(so_w)
+    os.close(se_w)
+    sys.stdout = open(os.devnull, "w")
+    sys.stderr = sys.stdout
+    so_redir = pushy.util.StdoutRedirector(so_r)
+    se_redir = pushy.util.StderrRedirector(se_r)
+    so_redir.start()
+    se_redir.start()
+
+    # Start the request servicing loop.
+    try:
+        serve_forever(stdin, stdout)
+        stdout.close()
+        stdin.close()
+        os.close(STDOUT_FILENO)
+        os.close(STDERR_FILENO)
+        so_redir.join()
+        se_redir.join()
+    finally:
+        stdout.close()
+        stdin.close()
 
 
 class pushy_server(asyncore.dispatcher):

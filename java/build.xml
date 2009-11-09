@@ -60,7 +60,7 @@
     </target>
 
     <target name="test" depends="jar,compile_tests">
-        <junit fork="yes">
+        <junit fork="yes" showoutput="true" haltonfailure="true">
             <jvmarg value="-enableassertions"/>
             <classpath>
                 <pathelement path="${classpath}"/>

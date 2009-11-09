@@ -203,10 +203,6 @@ def try_set_binary(fd):
 def pushy_server(stdin, stdout):
     import pickle, sys
 
-    STDIN_FILENO  = 0
-    STDOUT_FILENO = 1
-    STDERR_FILENO = 2
-
     # Reconstitute the package hierarchy delivered from the client
     (packages, modules) = pickle.load(stdin)
 
@@ -214,39 +210,8 @@ def pushy_server(stdin, stdout):
     importer = InMemoryImporter(packages, modules)
     sys.meta_path.insert(0, importer)
 
-    # Redirect stdout/stderr. We will redirect stdout/stderr to
-    # /dev/null to start with, but this behaviour can be overridden
-    # by assigning a different file to os.stdout/os.stderr.
-    import pushy.util
-    (so_r, so_w) = os.pipe()
-    (se_r, se_w) = os.pipe()
-    os.dup2(so_w, STDOUT_FILENO)
-    os.dup2(se_w, STDERR_FILENO)
-    for f in (so_r, so_w, se_r, se_w):
-        try_set_binary(f)
-    os.close(so_w)
-    os.close(se_w)
-    sys.stdout = open(os.devnull, "w")
-    sys.stderr = sys.stdout
-    so_redir = pushy.util.StdoutRedirector(so_r)
-    se_redir = pushy.util.StderrRedirector(se_r)
-    so_redir.start()
-    se_redir.start()
-
-    # Start the request servicing loop
-    try:
-        import pushy.protocol
-        import pushy.util
-        import pushy.server
-        pushy.server.serve_forever(stdin, stdout)
-        stdout.close()
-        os.close(STDOUT_FILENO)
-        os.close(STDERR_FILENO)
-        so_redir.join()
-        se_redir.join()
-    finally:
-        stdout.close()
-        stdin.close()
+    import pushy.server
+    pushy.server.serve_stdio_forever(stdin, stdout)
 
 ###############################################################################
 # Auto-import object.
@@ -383,7 +348,7 @@ def get_transport(target):
 
 logid = 0
 
-class PushyClient:
+class PushyClient(object):
     "Client-side Pushy connection initiator."
 
     pushy_packages = None

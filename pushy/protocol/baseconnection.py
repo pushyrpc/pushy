@@ -23,7 +23,7 @@
 
 import logging, marshal, os, struct, sys, thread, threading
 from pushy.protocol.message import Message, MessageType, message_types
-from pushy.protocol.proxy import Proxy, ProxyType
+from pushy.protocol.proxy import Proxy, ProxyType, proxy_types
 import pushy.util
 
 
@@ -287,7 +287,6 @@ Peer Thread:          %r
             self.__processing_condition.release()
 
         # Now send the message.
-        pushy.util.logger.debug("Sending response, type: %r", type(result))
         self.__send_message(MessageType.response, result)
 
 
@@ -465,7 +464,7 @@ Peer Thread:          %r
             if type(id_) is tuple:
                 pushy.util.logger.debug(
                     "Unmarshalling object: %r, %r, %r",
-                    id_[0], id_[1], id_[2])
+                    id_[0], id_[1], proxy_types[id_[2]])
 
                 # New object: (id, opmask, object_type, args)
                 p = Proxy(id_[0], id_[1], id_[2], id_[3], self,
@@ -519,9 +518,9 @@ Peer Thread:          %r
     def __send_message(self, message_type, args):
         thread_id = self.__peer_thread
         m = Message(message_type, self.__marshal(args), thread_id)
-        pushy.util.logger.debug("[%r] Sending %r (%r)",
-                                self.__connid, m, thread_id)
         bytes = m.pack()
+        pushy.util.logger.debug("[%r] Sending %r (%r): %r",
+                                self.__connid, m, thread_id, bytes)
         self.__ostream_lock.acquire()
         try:
             self.__ostream.write(bytes)
@@ -571,7 +570,6 @@ Peer Thread:          %r
                 # An exception raised while handling an exception message
                 # should be sent up to the caller.
                 if m.type is MessageType.exception:
-                    pushy.util.logger.debug("Raising exception")
                     raise e
 
                 # Allow the message receiving thread to proceed.
@@ -584,8 +582,8 @@ Peer Thread:          %r
                     self.__processing_condition.release()
 
                 # Send the above three objects to the caller
-                #pushy.util.logger.debug(
-                #    "Sending back an exception", exc_info=sys.exc_info())
+                import traceback
+                pushy.util.logger.debug(traceback.format_exc())
                 self.__send_message(MessageType.exception, e)
         finally:
             if is_request:

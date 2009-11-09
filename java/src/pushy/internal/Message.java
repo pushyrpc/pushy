@@ -182,7 +182,7 @@ public class Message
     {
         long hi4 = (long)unpackInteger(stream);
         long lo4 = (long)unpackInteger(stream);
-        return (hi4 << 4) | lo4;
+        return ((hi4 << 32) & 0xFFFFFFFF00000000L) | (lo4 & 0xFFFFFFFFL);
     }
 
     // Utility method for packing a network-order "int" into a byte array.

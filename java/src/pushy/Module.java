@@ -32,7 +32,7 @@ public class Module extends pushy.internal.DelegatingPushyObject
         this(__import__(client, name));
     }
 
-    protected Module(PushyObject object)
+    private Module(PushyObject object)
     {
         super(object);
     }
