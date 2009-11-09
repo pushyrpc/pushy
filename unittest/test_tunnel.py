@@ -43,11 +43,9 @@ class TestTunnel(unittest.TestCase):
         remote_pushy = self.conn.modules.pushy
         remote_conn = remote_pushy.connect("local:")
         try:
-            print dir(remote_conn.modules.os.getpid)
             assert os.getpid() != self.conn.modules.os.getpid()
             assert self.conn.modules.os.getpid() != \
                    remote_conn.modules.os.getpid()
-            pass
         finally:
             remote_conn.close()
 
