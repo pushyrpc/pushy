@@ -79,8 +79,10 @@ public class Client
 
     private Process pushyServer;
     private Connection connection;
-    private PushyObject remoteConnect;
+    private PushyObject remoteConnection;
     private PushyObject remoteEvaluate;
+    private PushyObject remotePutfile;
+    private PushyObject remoteGetfile;
     private Map modules = new HashMap();
     private RemoteSystem system;
 
@@ -103,6 +105,12 @@ public class Client
      */
     public Client(String address, Map properties) throws IOException
     {
+        // If a null address was specified, default to a local connection.
+        if (address == null)
+            address = "local:";
+        else
+            address = address.trim();
+
         String pushyLoaderProgram =
             "import sys;" +
             "sys.path.insert(0, sys.argv[1]);" +
@@ -120,19 +128,24 @@ public class Client
             connection = new Connection(pushyServer.getInputStream(),
                                         pushyServer.getOutputStream());
 
-            // If the address is non-local, create a connection in the local
-            // connection.
-/*
-            PushyObject pushyModule =
-                (PushyObject)connection.evaluate(
-                    "__import__('pushy')", null, null);
-            PushyObject connectMethod =
-                (PushyObject)pushyModule.__getattr__("connect");
-            remoteConnect =
-                (PushyObject)connectMethod.__call__(
-                    new Object[]{address}, properties);
-            remoteEvaluate = (PushyObject)remoteConnect.__getattr__("eval");
-*/
+            // If the address is non-local, create a tunnelled connection.
+            if (!address.equals("local:"))
+            {
+                PushyObject pushyModule =
+                    (PushyObject)connection.evaluate(
+                        "__import__('pushy')", null, null);
+                PushyObject connectMethod =
+                    (PushyObject)pushyModule.__getattr__("connect");
+                remoteConnection =
+                    (PushyObject)connectMethod.__call__(
+                        new Object[]{address}, properties);
+                remoteEvaluate =
+                    (PushyObject)remoteConnection.__getattr__("eval");
+                remotePutfile =
+                    (PushyObject)remoteConnection.__getattr__("putfile");
+                remoteGetfile =
+                    (PushyObject)remoteConnection.__getattr__("getfile");
+            }
         }
         catch (Throwable e)
         {
@@ -213,9 +226,10 @@ public class Client
      */
     public Object evaluate(String expression, Map locals, Map globals)
     {
-        return connection.evaluate(expression, locals, globals);
-        //return remoteEvaluate.__call__(
-        //           new Object[]{expression, locals, globals});
+        if (remoteEvaluate == null)
+            return connection.evaluate(expression, locals, globals);
+        Object[] args = new Object[]{expression, locals, globals};
+        return remoteEvaluate.__call__(args);
     }
 
     /**
@@ -244,7 +258,10 @@ public class Client
      */
     public void putfile(String localFile, String remoteFile)
     {
-        //execute("putfile", new Object[]{localFile, remoteFile});
+        if (remotePutfile == null)
+            pushy.internal.LocalFileIO.copyfile(localFile, remoteFile);
+        else
+            remotePutfile.__call__(new Object[]{localFile, remoteFile});
     }
 
     /**
@@ -256,7 +273,10 @@ public class Client
      */
     public void getfile(String remoteFile, String localFile)
     {
-        //execute("getfile", new Object[]{remoteFile, localFile});
+        if (remotePutfile == null)
+            pushy.internal.LocalFileIO.copyfile(remoteFile, localFile);
+        else
+            remoteGetfile.__call__(new Object[]{remoteFile, localFile});
     }
 
     /**
