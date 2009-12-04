@@ -76,9 +76,10 @@ class _Popen(subprocess.Popen):
     def __del__(self):
         if os.path.exists(self.__askpass):
             os.remove(self.__askpass)
-    def close(self):
+        subprocess.Popen.__del__(self)
+    def wait(self):
         try:
-            subprocess.Popen.close(self)
+            return subprocess.Popen.wait(self)
         finally:
             if os.path.exists(self.__askpass):
                 os.remove(self.__askpass)
@@ -104,10 +105,9 @@ def Popen(command, password, **kwargs):
     os.chmod(path, 0700)
 
     try:
-        tf = os.fdopen(fd, "w+")
+        tf = os.fdopen(fd, "w")
         print >> tf, "#!" + sys.executable
         print >> tf, "import os; print os.environ['SSH_PASSWORD']"
-        print >> tf, "import os; os.remove(__file__)"
         tf.close()
 
         # Configure environment variables.

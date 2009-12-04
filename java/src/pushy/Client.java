@@ -83,6 +83,7 @@ public class Client
     private PushyObject remoteEvaluate;
     private PushyObject remotePutfile;
     private PushyObject remoteGetfile;
+    private PushyObject remoteClose;
     private Map modules = new HashMap();
     private RemoteSystem system;
 
@@ -145,6 +146,8 @@ public class Client
                     (PushyObject)remoteConnection.__getattr__("putfile");
                 remoteGetfile =
                     (PushyObject)remoteConnection.__getattr__("getfile");
+                remoteClose =
+                    (PushyObject)remoteConnection.__getattr__("close");
             }
         }
         catch (Throwable e)
@@ -194,6 +197,8 @@ public class Client
                 {
                     try
                     {
+                        if (remoteClose != null)
+                            remoteClose.__call__();
                         pushyServer.getOutputStream().close();
                         pushyServer.getInputStream().close();
                     }

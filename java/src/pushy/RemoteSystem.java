@@ -53,6 +53,11 @@ public class RemoteSystem
     {
         return properties.getProperty(key);
     }
+
+    public java.util.Properties getProperties()
+    {
+        return properties;
+    }
 }
 
 class RemoteSystemProperties extends java.util.Properties
