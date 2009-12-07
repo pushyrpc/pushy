@@ -5,6 +5,7 @@ import junit.framework.TestCase;
 import pushy.modules.*;
 import java.io.IOException;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,58 @@ public class FileTest extends TestCase
             } finally {
                 writer.close();
                 file.delete();
+            }
+        } finally {
+            dir.delete();
+        }
+    }
+
+    /**
+     * Test that pushy.io.File.listFiles() returns pushy.io.File objects.
+     */
+    public void testListFiles() throws java.io.IOException {
+        TempfileModule tempfile = (TempfileModule)client.getModule("tempfile");
+        File dir = tempfile.mkdtemp();
+        assertTrue(dir.exists());
+        try {
+            pushy.io.File testfile = new pushy.io.File(client, dir, "file");
+            new pushy.io.FileOutputStream(testfile);
+            try {
+                pushy.io.File testdir = new pushy.io.File(client, dir, "dir");
+                testdir.mkdir();
+                try {
+                    java.io.File[] found = dir.listFiles();
+                    assertNotNull(found);
+                    assertEquals(2, found.length);
+                    for (int i = 0; i < found.length; ++i)
+                        assertEquals(pushy.io.File.class, found[i].getClass());
+
+                    // Make sure the files passed to the filter are
+                    // pushy.io.File objects.
+                    final List filterFiles = new ArrayList();
+                    found = dir.listFiles(
+                        new java.io.FileFilter() {
+                            public boolean accept(File file) {
+                                filterFiles.add(file);
+                                return true;
+                            }
+                        }
+                    );
+
+                    assertNotNull(found);
+                    assertEquals(2, found.length);
+                    assertEquals(found.length, filterFiles.size());
+                    for (int i = 0; i < found.length; ++i)
+                    {
+                        assertEquals(pushy.io.File.class, found[i].getClass());
+                        assertEquals(pushy.io.File.class,
+                                     filterFiles.get(i).getClass());
+                    }
+                } finally {
+                    testdir.delete();
+                }
+            } finally {
+                testfile.delete();
             }
         } finally {
             dir.delete();

@@ -138,6 +138,76 @@ public class File extends java.io.File {
         return osModule.listdir(getAbsolutePath());
     }
 
+    public String[] list(java.io.FilenameFilter filter) {
+        String[] filenames = list();
+        if (filter == null || filenames == null)
+            return filenames;
+
+        int count = 0;
+        for (int i = 0; i < filenames.length; ++i)
+        {
+            if (filter.accept(this, filenames[i]))
+                filenames[count++] = filenames[i];
+        }
+
+        if (count == filenames.length)
+            return filenames;
+        String[] newfilenames = new String[count];
+        if (count > 0)
+            System.arraycopy(filenames, 0, newfilenames, 0, count);
+        return newfilenames;
+    }
+
+    public java.io.File[] listFiles() {
+        String[] filenames = list();
+        if (filenames == null)
+            return null;
+        java.io.File[] files = new java.io.File[filenames.length];
+        for (int i = 0; i < filenames.length; ++i)
+            files[i] = new pushy.io.File(client, filenames[i]);
+        return files;
+    }
+
+    public java.io.File[] listFiles(java.io.FileFilter filter) {
+        java.io.File[] files = listFiles();
+        if (filter == null || files == null)
+            return files;
+
+        int count = 0;
+        for (int i = 0; i < files.length; ++i)
+        {
+            if (filter.accept(files[i]))
+                files[count++] = files[i];
+        }
+
+        if (count == files.length)
+            return files;
+        java.io.File[] newfiles = new java.io.File[count];
+        if (count > 0)
+            System.arraycopy(files, 0, newfiles, 0, count);
+        return newfiles;
+    }
+
+    public java.io.File[] listFiles(java.io.FilenameFilter filter) {
+        java.io.File[] files = listFiles();
+        if (filter == null || files == null)
+            return files;
+
+        int count = 0;
+        for (int i = 0; i < files.length; ++i)
+        {
+            if (filter.accept(this, files[i].getName()))
+                files[count++] = files[i];
+        }
+
+        if (count == files.length)
+            return files;
+        java.io.File[] newfiles = new java.io.File[count];
+        if (count > 0)
+            System.arraycopy(files, 0, newfiles, 0, count);
+        return newfiles;
+    }
+
     public long length() {
         return ((Integer)osModule.stat(getAbsolutePath()).__getattr__(
                    "st_size")).intValue();
