@@ -108,7 +108,7 @@ public class SubprocessModule extends Module {
         }
 
         PushyObject popen = (PushyObject)Popen.__call__(args, kwargs);
-        return new JPushyProcess(popen, osModule, signalModule,
+        return new JPushyProcess(client, popen, osModule, signalModule,
                                  combineStderrStdout);
     }
 }
@@ -118,6 +118,7 @@ public class SubprocessModule extends Module {
  * java.lang.Process interface.
  */
 class JPushyProcess extends Process {
+    private Client client;
     private PushyObject popen;
     private OsModule osModule;
     private SignalModule signalModule;
@@ -125,11 +126,13 @@ class JPushyProcess extends Process {
     private FileInputStream stderrStream;
     private FileOutputStream stdinStream;
 
-    JPushyProcess(PushyObject popen,
+    JPushyProcess(Client client,
+                  PushyObject popen,
                   OsModule osModule,
                   SignalModule signalModule,
                   boolean combineStderrStdout)
     {
+        this.client = client;
         this.popen = popen;
         this.osModule = osModule;
         this.signalModule = signalModule;
@@ -147,7 +150,29 @@ class JPushyProcess extends Process {
     }
 
     public void destroy() {
-        osModule.kill(getPid(), signalModule.SIGKILL);
+        String osName = client.getSystem().getProperty("os.name");
+        boolean isWindows = osName.startsWith("Windows");
+        if (isWindows)
+        {
+            // On Windows use the "taskkill" command.
+            SubprocessModule subprocess =
+                (SubprocessModule)client.getModule("subprocess");
+
+            Process taskkillProcess = subprocess.exec(
+                new String[]{"taskkill", "/f", "/pid", ""+getPid()},
+                true, null, null);
+
+            // Wait for the taskkill command to complete.
+            try {
+                taskkillProcess.waitFor();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }   
+        else
+        {
+            osModule.kill(getPid(), signalModule.SIGKILL);
+        }
     }
 
     public int exitValue() {

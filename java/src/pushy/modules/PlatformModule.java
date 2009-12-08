@@ -35,7 +35,9 @@ public class PlatformModule extends Module
     private PushyObject systemMethod;
     private PushyObject machineMethod;
     private PushyObject releaseMethod;
+    private PushyObject versionMethod;
     private PushyObject win32verMethod;
+    private PushyObject architectureMethod;
 
     public PlatformModule(Client client)
     {
@@ -44,8 +46,10 @@ public class PlatformModule extends Module
         systemMethod = __getmethod__("system");
         machineMethod = __getmethod__("machine");
         releaseMethod = __getmethod__("release");
+        versionMethod = __getmethod__("version");
         if (__hasattr__("win32_ver"))
             win32verMethod = __getmethod__("win32_ver");
+        architectureMethod = __getmethod__("architecture");
     }
 
     public String platform()
@@ -61,6 +65,11 @@ public class PlatformModule extends Module
     public String machine()
     {
         return (String)machineMethod.__call__();
+    }
+
+    public String version()
+    {
+        return (String)versionMethod.__call__();
     }
 
     public String release()
@@ -79,6 +88,22 @@ public class PlatformModule extends Module
             return values;
         }
         throw new UnsupportedOperationException("win32_ver is not supported");
+    }
+
+    /**
+     * Call platform.architecture() (i.e. architecture(sys.executable))
+     */
+    public String[] architecture()
+    {
+        return (String[])architectureMethod.__call__();
+    }
+
+    /**
+     * Get the bit archtiecture and linkage format used by the executable.
+     */
+    public String[] architecture(String path)
+    {
+        return (String[])architectureMethod.__call__(new Object[]{path});
     }
 }
 

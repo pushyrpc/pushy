@@ -132,8 +132,8 @@ class RemoteSystemProperties extends java.util.Properties
     private String getOsName()
     {
         String system = platformModule.system();
-        if (system.equals("Windows"))
-            return system + " " + platformModule.release();
+        if (system.equals("Windows") || system.equals("Microsoft"))
+            return "Windows" + " " + platformModule.release();
         return system;
     }
 
@@ -143,11 +143,18 @@ class RemoteSystemProperties extends java.util.Properties
     public String getOsVersion()
     {
         String system = platformModule.system();
-        if (system.equals("Windows"))
+        if (system.equals("Windows") || system.equals("Microsoft"))
         {
             String[] win32ver = platformModule.win32_ver();
             String version = win32ver[1]; // Release/build version
             String csd = win32ver[2]; // Corrective Service Deliverable (SP)
+
+            if (version.length() == 0)
+            {
+                // platform.win32_ver() has been known to return empty strings
+                // (observed in a Cygwin environment, Windows 2003 Server).
+                version = platformModule.version();
+            }
 
             int dot = version.lastIndexOf('.');
             String release = version.substring(0, dot);
