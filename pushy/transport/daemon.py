@@ -39,7 +39,7 @@ class Popen(pushy.transport.BaseTransport):
         self.stdin._close = True
 
     def close(self):
-        self.stdin.close()
-        self.stdout.close()
+        #self.stdin.close()
+        #self.stdout.close()
         self.__socket.close()
 

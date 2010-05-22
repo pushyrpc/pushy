@@ -28,17 +28,53 @@ package pushy.modules;
 import pushy.Client;
 import pushy.PushyObject;
 import pushy.Module;
+import pushy.net.RemoteSocket;
 
 public class SocketModule extends Module {
+    public static final int AF_INET     = 2;
+    public static final int AF_INET6    = 10;
+    public static final int SOCK_STREAM = 1;
+    public static final int SOCK_DGRAM  = 2;
+    public static final int IPPROTO_TCP = 6;
+
     private PushyObject gethostnameMethod;
+    private PushyObject gethostbynameMethod;
+    private PushyObject socketMethod;
 
     public SocketModule(Client client) {
         super(client, "socket");    
         gethostnameMethod = __getmethod__("gethostname");
+        gethostbynameMethod = __getmethod__("gethostbyname");
+        socketMethod = __getmethod__("socket");
     }
 
     public String getHostName() {
         return (String)gethostnameMethod.__call__();
+    }
+
+    public String getHostByName(String name) {
+        return (String)gethostbynameMethod.__call__(new String[]{name});
+    }
+
+    public RemoteSocket socket() {
+        return socket(AF_INET);
+    }
+
+    public RemoteSocket socket(int family) {
+        return socket(family, SOCK_STREAM);
+    }
+
+    public RemoteSocket socket(int family, int type) {
+        return socket(family, type, 0);
+    }
+
+    public RemoteSocket socket(int family, int type, int protocol) {
+        PushyObject socketObject =
+            (PushyObject)socketMethod.__call__(new Object[]{
+                new Integer(family),
+                new Integer(type),
+                new Integer(protocol)});
+        return new RemoteSocket(socketObject);
     }
 }
 
