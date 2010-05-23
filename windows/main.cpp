@@ -41,7 +41,8 @@ namespace {
   SERVICE_STATUS_HANDLE status_handle;
 }
 
-void ReportSvcStatus(DWORD currentState, DWORD win32ExitCode, DWORD waitHint)
+static void
+ReportSvcStatus(DWORD currentState, DWORD win32ExitCode, DWORD waitHint)
 {
     static DWORD checkPoint = 1;
 
@@ -67,7 +68,7 @@ void ReportSvcStatus(DWORD currentState, DWORD win32ExitCode, DWORD waitHint)
 /**
  * Not re-entrant - don't use in threaded code.
  */
-const char* format_error(DWORD error)
+static const char* format_error(DWORD error)
 {
     static TCHAR buffer[65535];
     DWORD nchars =
@@ -80,7 +81,7 @@ const char* format_error(DWORD error)
     return buffer; 
 }
 
-VOID WINAPI control_handler(DWORD code)
+static VOID WINAPI control_handler(DWORD code)
 {
     // Handle the requested control code. 
     switch(code) 
@@ -96,7 +97,7 @@ VOID WINAPI control_handler(DWORD code)
    ReportSvcStatus(service_status.dwCurrentState, NO_ERROR, 0);
 }
 
-VOID service_init(DWORD argc, LPTSTR *argv)
+static VOID service_init(DWORD argc, LPTSTR *argv)
 {
     // Report running status when initialization is complete.
     ReportSvcStatus(SERVICE_RUNNING, NO_ERROR, 0);
@@ -115,7 +116,7 @@ VOID service_init(DWORD argc, LPTSTR *argv)
     ReportSvcStatus(SERVICE_STOPPED, NO_ERROR, 0);
 }
 
-VOID WINAPI service_main(DWORD argc, LPTSTR *argv)
+static VOID WINAPI service_main(DWORD argc, LPTSTR *argv)
 {
     status_handle = RegisterServiceCtrlHandler(SERVICE_NAME, control_handler);
     if (!status_handle)
@@ -132,7 +133,7 @@ VOID WINAPI service_main(DWORD argc, LPTSTR *argv)
     service_init(argc, argv);
 }
 
-void start_service()
+static void start_service()
 {
     SERVICE_TABLE_ENTRY DispatchTable[] =
     {
@@ -145,7 +146,7 @@ void start_service()
 /**
  * Install as a service.
  */
-int service_install()
+static int service_install()
 {
     SC_HANDLE handleManager;
     SC_HANDLE handleService;
@@ -189,7 +190,7 @@ int service_install()
     return 0;
 }
 
-void show_usage(const char *argv0)
+static void show_usage(const char *argv0)
 {
     std::cerr << "Usage: " << argv0 << " [options]" << std::endl
               << "  /shell:   Start the daemon in the shell" << std::endl

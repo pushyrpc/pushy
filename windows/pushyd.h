@@ -28,7 +28,7 @@
 
 #include <ostream>
 
-int pushyd_once(std::ostream *log);
+int pushyd_once(std::ostream *const log);
 int pushyd_main();
 void* pushyd_start();
 int pushyd_stop(void *handle);

@@ -214,7 +214,7 @@ void readArguments(NamedPipeConnection &conn,
     }
 }
 
-int pushyd_once(std::ostream *log)
+int pushyd_once(std::ostream *const log)
 {
     if (log) *log << "Creating pipe" << std::endl;
     NamedPipe pipe("\\\\.\\pipe\\pushy");
