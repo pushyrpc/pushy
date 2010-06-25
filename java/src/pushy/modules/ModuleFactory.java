@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2010 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -48,6 +48,7 @@ public class ModuleFactory {
         classes.put("stat", StatModule.class);
         classes.put("tempfile", TempfileModule.class);
         classes.put("time", TimeModule.class);
+        classes.put("_winreg", WinregModule.class);
     }
 
     public static Module createModule(Client client, String name)

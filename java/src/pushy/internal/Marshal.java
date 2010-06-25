@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2010 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -456,20 +456,46 @@ public class Marshal
         if (list.isEmpty())
             return new Object[]{};
 
+        // Find the first non-null object in the array. Remember whether any
+        // null objects have been seen, so we know whether or not we can cast
+        // to a primitive array.
         java.util.Iterator iter = list.iterator();
-        Class compType = iter.next().getClass();
-        while (iter.hasNext() && !compType.equals(Object.class))
-            if (!iter.next().getClass().equals(compType))
-                compType = Object.class;
+        boolean haveNull = false;
+        Object obj = iter.next();
+        while (obj == null && iter.hasNext())
+        {
+            haveNull = true;
+            obj = iter.next();
+        }
 
+        // Check that all elements in the array are of the same type, or null.
+        Class compType = Object.class;
+        if (obj != null)
+        {
+            compType = obj.getClass();
+            while (!compType.equals(Object.class) && iter.hasNext())
+            {
+                obj = iter.next();
+                if (obj == null)
+                    haveNull = true;
+                else if (!obj.getClass().equals(compType))
+                    compType = Object.class;
+            }
+        }
+
+        // Either we have an array full of Objects, or an array of
+        // heterogeneously typed objects.
         if (compType.equals(Object.class))
             return list.toArray(new Object[]{});
 
         // If the type is an Object type corresponding to primitive
         // type (e.g. Integer), get the primitive type.
-        Class primitiveType = (Class)primitiveTypes.get(compType);
-        if (primitiveType != null)
-            compType = primitiveType;
+        if (!haveNull)
+        {
+            Class primitiveType = (Class)primitiveTypes.get(compType);
+            if (primitiveType != null)
+                compType = primitiveType;
+        }
 
         // Create the array.
         Object array = Array.newInstance(compType, list.size());

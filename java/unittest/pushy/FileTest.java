@@ -111,7 +111,7 @@ public class FileTest extends TestCase
         assertTrue(dir.exists());
         try {
             pushy.io.File testfile = new pushy.io.File(client, dir, "file");
-            new pushy.io.FileOutputStream(testfile);
+            new pushy.io.FileOutputStream(testfile).close();
             try {
                 pushy.io.File testdir = new pushy.io.File(client, dir, "dir");
                 testdir.mkdir();
