@@ -33,18 +33,29 @@ import java.net.InetAddress;
 
 import pushy.PushyObject;
 import pushy.Client;
+import pushy.modules.SocketModule;
 
 public class RemoteSocket extends java.net.Socket
 {
+    private Client client;
     private PushyObject object;
     private PushyObject accept;
+    private boolean bound = false;
+    private boolean isInputShutdown = false;
+    private boolean isOutputShutdown = false;
 
-    public RemoteSocket(PushyObject object)
+    public RemoteSocket(Client client, PushyObject object)
     {
+        this.client = client;
         this.object = object;
         accept = (PushyObject)object.__getattr__("accept");
     }
 
+    /**
+     * Bind the socket to an (Inet)SocketAddress.
+     *
+     * Only AF_INET/AF_INET6 families are supported.
+     */
     public void bind(SocketAddress bindpoint) throws IOException
     {
         // Check/set bindpoint (address).
@@ -71,12 +82,24 @@ public class RemoteSocket extends java.net.Socket
                     address.getHostAddress(),
                     new Integer(socketAddress.getPort())
             }});
+            bound = true;
         } catch (RuntimeException e) {
             // Socket.bind() throws an IOException if it fails.
             SocketException se = new SocketException();
             se.initCause(e);
             throw se;
         }
+    }
+
+    public boolean isConnected()
+    {
+        // TODO do this properly.
+        return true;
+    }
+
+    public synchronized boolean isBound()
+    {
+        return bound;
     }
 
     public synchronized boolean isClosed()
@@ -90,6 +113,9 @@ public class RemoteSocket extends java.net.Socket
         {
             ((PushyObject)object.__getattr__("close")).__call__();
             object = null;
+            bound = false;
+            isInputShutdown = true;
+            isOutputShutdown = true;
         }
     }
 
@@ -105,6 +131,38 @@ public class RemoteSocket extends java.net.Socket
         return -1; // TODO check if this is what "real" Java does.
     }
 
+    /**
+     * Get the peer's address.
+     */
+    public synchronized SocketAddress getRemoteSocketAddress()
+    {
+        if (!isClosed())
+        {
+            PushyObject getpeername =
+                (PushyObject)object.__getattr__("getpeername");
+            Object[] address = (Object[])getpeername.__call__();
+            if (address.length == 2)
+            {
+                String host = (String)address[0];
+                int port = ((Integer)address[1]).intValue();
+                return InetSocketAddress.createUnresolved(host, port);
+            }
+            else if (address.length == 4)
+            {
+                String host = (String)address[0];
+                int port = ((Integer)address[1]).intValue();
+                int scope = ((Integer)address[3]).intValue();
+                return InetSocketAddress.createUnresolved(
+                            host + "%" + scope, port);
+            }
+            else
+            {
+                throw new RuntimeException("Unexpected result: " + address);
+            }
+        }
+        return null;
+    }
+
     public void listen(int backlog)
     {
         PushyObject listen = (PushyObject)object.__getattr__("listen");
@@ -113,8 +171,46 @@ public class RemoteSocket extends java.net.Socket
 
     public RemoteSocket accept()
     {
-        PushyObject[] result = (PushyObject[])accept.__call__();
-        return new RemoteSocket(result[0]);
+        Object[] result = (Object[])accept.__call__();
+        return new RemoteSocket(client, (PushyObject)result[0]);
+    }
+
+    public synchronized void shutdownInput() throws IOException
+    {
+        if (!isConnected())
+            throw new SocketException("Socket is not connected");
+        if (!isInputShutdown)
+        {
+            SocketModule module = (SocketModule)client.getModule("socket");
+            PushyObject shutdown = (PushyObject)object.__getattr__("shutdown");
+            Object SHUT_WR = module.__getattr__("SHUT_WR");
+            shutdown.__call__(new Object[]{SHUT_WR});
+            isInputShutdown = true;
+        }
+    }
+
+    public synchronized void shutdownOutput() throws IOException
+    {
+        if (!isConnected())
+            throw new SocketException("Socket is not connected");
+        if (!isOutputShutdown)
+        {
+            SocketModule module = (SocketModule)client.getModule("socket");
+            PushyObject shutdown = (PushyObject)object.__getattr__("shutdown");
+            Object SHUT_WR = module.__getattr__("SHUT_RD");
+            shutdown.__call__(new Object[]{SHUT_WR});
+            isOutputShutdown = true;
+        }
+    }
+
+    public boolean isInputShutdown()
+    {
+        return isInputShutdown;
+    }
+
+    public boolean isOutputShutdown()
+    {
+        return isOutputShutdown;
     }
 }
 

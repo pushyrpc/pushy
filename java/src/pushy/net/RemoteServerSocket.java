@@ -120,6 +120,11 @@ public class RemoteServerSocket extends java.net.ServerSocket
         return socket.getLocalPort();
     }
 
+    public boolean isBound()
+    {
+        return socket != null && socket.isBound();
+    }
+
     public boolean isClosed()
     {
         return socket == null;
