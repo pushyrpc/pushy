@@ -41,6 +41,7 @@ public class RemoteSocket extends java.net.Socket
     private PushyObject object;
     private PushyObject accept;
     private boolean bound = false;
+    private boolean connected = false;
     private boolean isInputShutdown = false;
     private boolean isOutputShutdown = false;
 
@@ -93,8 +94,7 @@ public class RemoteSocket extends java.net.Socket
 
     public boolean isConnected()
     {
-        // TODO do this properly.
-        return true;
+        return connected;
     }
 
     public synchronized boolean isBound()
@@ -114,6 +114,7 @@ public class RemoteSocket extends java.net.Socket
             ((PushyObject)object.__getattr__("close")).__call__();
             object = null;
             bound = false;
+            connected = false;
             isInputShutdown = true;
             isOutputShutdown = true;
         }
@@ -172,7 +173,9 @@ public class RemoteSocket extends java.net.Socket
     public RemoteSocket accept()
     {
         Object[] result = (Object[])accept.__call__();
-        return new RemoteSocket(client, (PushyObject)result[0]);
+        RemoteSocket socket = new RemoteSocket(client, (PushyObject)result[0]);
+        socket.connected = true;
+        return socket;
     }
 
     public synchronized void shutdownInput() throws IOException

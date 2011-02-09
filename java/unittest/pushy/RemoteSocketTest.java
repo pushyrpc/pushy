@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.ServerSocket;
 import java.net.SocketAddress;
 
 /**
@@ -63,7 +64,7 @@ public class RemoteSocketTest extends TestCase
      * Test the accept() method of RemoteServerSocket.
      */
     public void testAccept() throws Exception {
-        final RemoteServerSocket server = new RemoteServerSocket(client, 0);
+        final ServerSocket server = new RemoteServerSocket(client, 0);
         final int serverPort = server.getLocalPort();
         try {
             // Create another thread to connect to the socket.
@@ -85,6 +86,7 @@ public class RemoteSocketTest extends TestCase
             // Accept the connection.
             Socket peer = server.accept();
             try {
+                assertTrue(peer.isConnected());
                 thread.join();
                 SocketAddress peerAddress = peer.getRemoteSocketAddress();
                 assertTrue(peerAddress instanceof InetSocketAddress);
