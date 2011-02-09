@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2010, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -118,6 +118,11 @@ public class RemoteServerSocket extends java.net.ServerSocket
     public int getLocalPort()
     {
         return socket.getLocalPort();
+    }
+
+    public boolean isBound()
+    {
+        return socket != null && socket.isBound();
     }
 
     public boolean isClosed()

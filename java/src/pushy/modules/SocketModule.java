@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -37,12 +37,14 @@ public class SocketModule extends Module {
     public static final int SOCK_DGRAM  = 2;
     public static final int IPPROTO_TCP = 6;
 
+    private Client client;
     private PushyObject gethostnameMethod;
     private PushyObject gethostbynameMethod;
     private PushyObject socketMethod;
 
     public SocketModule(Client client) {
-        super(client, "socket");    
+        super(client, "socket");
+        this.client = client;
         gethostnameMethod = __getmethod__("gethostname");
         gethostbynameMethod = __getmethod__("gethostbyname");
         socketMethod = __getmethod__("socket");
@@ -74,7 +76,7 @@ public class SocketModule extends Module {
                 new Integer(family),
                 new Integer(type),
                 new Integer(protocol)});
-        return new RemoteSocket(socketObject);
+        return new RemoteSocket(client, socketObject);
     }
 }
 
