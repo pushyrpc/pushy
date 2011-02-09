@@ -1,4 +1,4 @@
-# Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -28,18 +28,31 @@ import pushy.server
 
 DEFAULT_PORT = pushy.server.DEFAULT_PORT
 
+class WrappedSocketFile(object):
+    def __init__(self, file_, socket_, how):
+        self.__file = file_
+        self.__socket = socket_
+        self.__how = how
+    def close(self):
+        try:
+            self.__socket.shutdown(self.__how)
+        except: pass
+        return self.__file.close()
+    def __getattr__(self, name):
+        return getattr(self.__file, name)
+
 class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, port=DEFAULT_PORT, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address, daemon=True)
         self.__socket = socket.socket()
         self.__socket.connect((address, port))
-        self.stdin  = self.__socket.makefile("wb")
-        self.stdout = self.__socket.makefile("rb")
+        self.stdin  = WrappedSocketFile(self.__socket.makefile("wb"),
+                                        self.__socket, socket.SHUT_WR)
+        self.stdout = WrappedSocketFile(self.__socket.makefile("rb"),
+                                        self.__socket, socket.SHUT_RD)
         self.stderr = StringIO.StringIO()
         self.stdin._close = True
 
     def close(self):
-        #self.stdin.close()
-        #self.stdout.close()
         self.__socket.close()
 
