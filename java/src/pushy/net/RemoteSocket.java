@@ -221,14 +221,7 @@ public class RemoteSocket extends java.net.Socket
         if (!isInputShutdown)
         {
             if (inputStream == null)
-            {
-                PushyObject makefile =
-                    (PushyObject)object.__getattr__("makefile");
-                PushyObject file =
-                    (PushyObject)makefile.__call__(
-                        new Object[]{"rb", new Integer(1)});
-                inputStream = new pushy.io.FileInputStream(file);
-            }
+                inputStream = new RemoteSocketInputStream(object);
             return inputStream;
         }
         else

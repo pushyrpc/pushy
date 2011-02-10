@@ -34,14 +34,11 @@ import pushy.PushyObject;
 
 public class FileInputStream extends InputStream {
     private PushyObject file;
-    private PushyObject readMethod;
-    private PushyObject closeMethod;
-    
+    private PushyObject readMethod = null;
+
     public FileInputStream(PushyObject file) {
         assert file != null;
         this.file = file;
-        readMethod = (PushyObject)file.__getattr__("read");
-        closeMethod = (PushyObject)file.__getattr__("close");
     }
 
     public FileInputStream(File file) {
@@ -76,14 +73,18 @@ public class FileInputStream extends InputStream {
         return char_.charAt(0);
     }
 
-    public void close() throws IOException {
-        closeMethod.__call__(null);
+    public synchronized void close() throws IOException
+    {
+        if (file != null)
+        {
+            ((PushyObject)file.__getattr__("close")).__call__(null);
+            file = null;
+        }
     }
 
     public int read(byte[] b, int offset, int length) throws IOException {
-        String bytes =
-            (String)readMethod.__call__(new Object[]{new Integer(length)});
-        if (bytes.length() == 0)
+        String bytes = getBytes(length);
+        if (bytes == null || bytes.length() == 0)
             return -1;
         System.arraycopy(
             bytes.getBytes("ISO-8859-1"), 0, b, offset, bytes.length());
@@ -92,6 +93,12 @@ public class FileInputStream extends InputStream {
 
     public int read(byte[] b) throws IOException {
         return read(b, 0, b.length);
+    }
+
+    protected synchronized String getBytes(int n) throws IOException {
+        if (readMethod == null)
+            readMethod = (PushyObject)file.__getattr__("read");
+        return (String)readMethod.__call__(new Object[]{new Integer(n)});
     }
 
     // Open a file in the remote interpreter.
