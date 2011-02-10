@@ -26,6 +26,7 @@
 package pushy.net;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.InetSocketAddress;
@@ -44,6 +45,7 @@ public class RemoteSocket extends java.net.Socket
     private boolean connected = false;
     private boolean isInputShutdown = false;
     private boolean isOutputShutdown = false;
+    private InputStream inputStream = null;
 
     public RemoteSocket(Client client, PushyObject object)
     {
@@ -107,16 +109,19 @@ public class RemoteSocket extends java.net.Socket
         return object == null;
     }
 
-    public synchronized void close()
+    public synchronized void close() throws IOException
     {
         if (!isClosed())
         {
             ((PushyObject)object.__getattr__("close")).__call__();
+            if (inputStream != null)
+                inputStream.close();
             object = null;
             bound = false;
             connected = false;
             isInputShutdown = true;
             isOutputShutdown = true;
+            inputStream = null;
         }
     }
 
@@ -188,6 +193,9 @@ public class RemoteSocket extends java.net.Socket
             PushyObject shutdown = (PushyObject)object.__getattr__("shutdown");
             Object SHUT_WR = module.__getattr__("SHUT_WR");
             shutdown.__call__(new Object[]{SHUT_WR});
+            if (inputStream != null)
+                inputStream.close();
+            inputStream = null;
             isInputShutdown = true;
         }
     }
@@ -203,6 +211,29 @@ public class RemoteSocket extends java.net.Socket
             Object SHUT_WR = module.__getattr__("SHUT_RD");
             shutdown.__call__(new Object[]{SHUT_WR});
             isOutputShutdown = true;
+        }
+    }
+
+    public synchronized InputStream getInputStream() throws IOException
+    {
+        if (!isConnected())
+            throw new SocketException("Socket is not connected");
+        if (!isInputShutdown)
+        {
+            if (inputStream == null)
+            {
+                PushyObject makefile =
+                    (PushyObject)object.__getattr__("makefile");
+                PushyObject file =
+                    (PushyObject)makefile.__call__(
+                        new Object[]{"rb", new Integer(1)});
+                inputStream = new pushy.io.FileInputStream(file);
+            }
+            return inputStream;
+        }
+        else
+        {
+            throw new SocketException("Socket input is shutdown");
         }
     }
 
