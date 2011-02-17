@@ -1,0 +1,71 @@
+Application Programming Interface (API)
+=======================================
+
+.. py:module:: pushy
+
+.. py:function:: connect(target, [python="python", [\*\*kwargs]])
+
+   Create a Pushy connection.
+
+   :param target: Identifies which transport to use, and the endpoint to connect to. The argument must be formatted as: *transport*:[*transport-specific-address*].
+
+      >>> pushy.connect("local:")
+      <pushy.client.PushyClient object at ...>
+
+      >>> pushy.connect("ssh:remotehost")
+      <pushy.client.PushyClient object at ...>
+
+   :type target: string
+   :param python: Specifies the path to the Python executable to invoke on the remote host which is being connected to. By default it is simply "python", in which case standard PATH lookup will be used.
+   :type python: string
+
+   Some transports will require additional information to create a connection,
+   such as a username and password. To support this, all keyword arguments are
+   passed through to the transport's :py:func:`pushy.transport.Popen` function.
+   The address component of ``target`` is passed to the Popen function with the
+   name ``address``. For details on the keyword arguments expected by the
+   builtin transports, see :py:mod:`pushy.transport`.
+
+
+.. py:class:: PushyClient
+
+    This class is instantiated by :py:func:`pushy.connect`, and is the primary
+    interface for interacting with the remote interpreter. It provides methods
+    for evaluating Python expressions, copying files between local and remote
+    hosts, and for obtaining references to Python modules in the remote
+    interpreter.
+
+    .. py:attribute:: modules
+
+       Provides access to the remote interpreter's modules. Accessing an
+       attribute of ``modules`` is equivalent to importing a module.
+
+          >>> conn = pushy.connect("local:")
+          >>> conn.modules.os
+          <module 'os' from 'C:\Python26\lib\os.pyc'>
+          >>> os.getpid()
+          4772
+          >>> conn.modules.os.getpid()
+          5564
+          
+
+    .. py:method:: getfile(remote_path, local_path)
+
+       Copy a file from the remote host to the local host. If the transport
+       class defines a ``getfile`` method, that will be used to perform the
+       transfer. Otherwise, Pushy will fall back to a relatively inefficient,
+       transport-independent method.
+
+         >>> conn = pushy.connect("local:")
+         >>> conn.getfile("/remote/path/to/foo.txt", "/local/path/to/bar.txt")
+
+    .. py:method:: putfile(local_path, remote_path)
+
+       Copy a file from the local host to the remote host. If the transport
+       class defines a ``putfile`` method, that will be used to perform the
+       transfer. Otherwise, Pushy will fall back to a relatively inefficient,
+       transport-independent method.
+
+         >>> conn = pushy.connect("local:")
+         >>> conn.putfile("/local/path/to/foo.txt", "/remote/path/to/bar.txt")
+

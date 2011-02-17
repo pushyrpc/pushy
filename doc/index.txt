@@ -1,0 +1,60 @@
+.. Pushy documentation master file, created by
+   sphinx-quickstart on Fri Jul 23 22:33:27 2010.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+``pushy`` -- remote interpreter access
+======================================
+
+:Release: |version|
+:Date: |today|
+
+
+Contents
+--------
+
+.. toctree::
+   :numbered:
+
+   api.txt
+   transports.txt
+   server.txt
+
+..   examples.txt
+
+
+About Pushy
+-----------
+
+The Pushy package provides applicaton developers with a simple interface
+for connecting two Python interpreters, either on the local host, or over a
+network. Once connected, the interpreters may access objects in each other, as
+if they were local. Where objects are mutable (i.e. may change over time), then
+objects are "proxied". This means that a local object is created that mirrors
+the remote object, and sends all local function/attribute access calls to the
+remote object. Special care has been taken to proxy builtin types properly, so
+that proxied objects may be passed to Python's various builtin functions.
+
+Pushy contains multiple transports for connecting interpreters, as well as a
+means for users to provide their own transport modules. Builtin transports are
+provided for connecting to :ref:`local <local-transport>` interpreters, and to
+remote interpreters via :ref:`SSH <ssh-transport>`, and named pipes
+(using :ref:`SMB <smb-transport>`) on Microsoft Windows.
+
+One of the most useful features of Pushy is that it will take care
+of starting the target Python interpreter for you, depending on which transport
+is selected. Of particular note, the :ref:`SSH <ssh-transport>` transport will
+start a remote Python interpreter and initialise a Pushy connection, without
+having Pushy installed on the remote system. Similarly, the
+:ref:`local <local-transport>` transport will create a new Python interpreter
+on the local host.
+
+Resources
+---------
+
+Download
+    http://launchpad.net/pushy/+download
+
+Code Repository and Issue Tracking
+    http://launchpad.net/pushy
+

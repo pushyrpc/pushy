@@ -1,0 +1,213 @@
+Builtin Transport Modules
+=========================
+
+Pushy provides various builtin transports, which are defined here. Each
+transport module provides a :py:func:`pushy.transport.Popen` function for
+creating a transport object, whose class inherits from
+:py:class:`pushy.transport.BaseTransport`.
+
+
+Base Transport
+--------------
+
+.. py:module:: pushy.transport
+
+
+.. py:function:: Popen(command, \*\*kwargs)
+
+   Executes ``command``, returning an object representing the process, with
+   pipes for standard I/O.
+
+   Each transport module must define this function, which will be used to
+   return an object specific to that transport. For example, the
+   :ref:`local <local-transport>` module provides a Popen function which simply
+   wraps :py:func:`subprocess.Popen`. Each transport may expect different
+   keyword parameters.
+
+
+
+.. py:class:: BaseTransport
+
+   The base class for all transports.
+
+   .. py:attribute:: BaseTransport.address
+
+      The address to which this transport connection was made.
+
+   .. py:attribute:: stdin
+
+      The standard input file object for the process created by this transport.
+
+   .. py:attribute:: stdout
+
+      The standard output file object for the process created by this
+      transport.
+
+   .. py:attribute:: stderr
+
+      The standard error file object for the process created by this transport.
+
+      .. note::
+
+         Some transports may not provide access to standard error, in which
+         case they must provide a file like object which simply returns nothing
+         when read from. Pushy only reads from stderr when an error has
+         occurred. The absence of a real stderr file will not stop Pushy from
+         working, but it will mean that diagnosing problems with Pushy will be
+         more difficult.
+
+   .. py:method:: BaseTransport.getfile(remote_path, local_path)
+
+      If defined by a transport, this method is used by
+      :py:meth:`pushy.PushyClient.getfile` for copying a file to the local host
+      from the remote host that this transport connects to, making use of any
+      transport-specific file transfer capabilities.
+
+   .. py:method:: BaseTransport.putfile(local_path, remote_path)
+
+      If defined by a transport, this method is used by
+      :py:meth:`pushy.PushyClient.putfile` for copying a file from the local
+      host to the remote host that this transport connects to, making use of
+      any transport-specific file transfer capabilities.
+
+
+
+
+
+.. _local-transport:
+
+`local` - Local Transport
+-------------------------
+
+.. py:module:: pushy.transport.local
+
+The ``local`` transport is for creating and connecting to a Python interpreter
+on the local host. It will, by default, spawn a new Python interpreter using
+the same Python executable (i.e. sys.executable).  The
+:py:mod:`pushy.transport.local` module defines a single class,
+:py:class:`Popen`, which provides the ``local`` transport.
+
+.. py:class:: Popen(command, address)
+
+   Defines the ``local`` transport, for creating and connecting to new Python
+   interpreters on the local host.
+
+   .. py:method:: getfile(source_path, destination_path)
+
+      Implements :py:meth:`pushy.transport.BaseTransport.getfile`, calling
+      :py:func:`shutil.copyfile` to perform the copy.
+
+   .. py:method:: putfile(source_path, destination_path)
+
+      Implements :py:meth:`pushy.transport.BaseTransport.putfile`, calling
+      :py:func:`shutil.copyfile` to perform the copy.
+
+
+
+
+.. _ssh-transport:
+
+`ssh` - Secure Shell (SSH) Transport
+------------------------------------
+
+.. py:module:: pushy.transport.ssh
+
+The primary driver for Pushy's inception, the ssh transport provides a means of
+creating and connecting to a new Python interpreter on a remote host, via SSH
+(Secure Shell). Not only is the remote Python interpreter started up on the
+fly, but Pushy doesn't need to be installed on the remote host, and nothing is
+transferred onto the remote filesystem. The ssh transport makes Pushy a safe
+alternative to traditional nailed-up, privileged services.
+
+.. py:class:: Popen(command, address, username=None, password=None, use_native=None)
+
+   Defines the ``ssh`` transport, for creating and connecting to new Python
+   interpreters on a remote host, via SSH (Secure Shell).  Pushy is able to
+   connect via SSH using either `Paramiko <http://www.lag.net/paramiko/>`_, or,
+   if available, a native SSH client, such as those provided by
+   `OpenSSH <http://www.openssh.com>`_ and
+   `PuTTy <http://www.chiark.greenend.org.uk/~sgtatham/putty>`_.
+
+   The username and password arguments may be omitted, in which case the
+   current username will be used, and no password will be provided. In the
+   absence of a password, public-key authentication will be attempted.
+
+   :param username: The username with which to authenticate and run the remote Python process as. If omitted, the current user's username will instead be used.
+   :type username: string or None
+   :param password: The password with which to authenticate. If omitted, public-key authentication will be attempted.
+   :type password: string or None
+   :param use_native: On Windows, Paramiko has been found to be faster than PuTTy, and so it is the default. On other platforms, the native ``ssh`` program is preferred. The preference may be overridden by passing a boolean value as the use_native argument.
+   :type use_native: bool or None
+
+   .. py:method:: getfile(source_path, destination_path)
+
+      Implements :py:meth:`pushy.transport.BaseTransport.getfile`, using SFTP
+      (Secure File Transfer Protocol) to perform the copy.
+
+   .. py:method:: putfile(source_path, destination_path)
+
+      Implements :py:meth:`pushy.transport.BaseTransport.putfile`, using SFTP
+      to perform the copy.
+
+
+
+
+
+.. _smb-transport:
+
+`smb` - Microsoft Windows Named Pipe (SMB) Transport
+----------------------------------------------------
+
+.. py:module:: pushy.transport.smb
+
+Whilst the :ref:`ssh <ssh-transport>` transport works perfectly well with SSH
+daemons on Microsoft Windows, it is not typical for systems running Windows to
+have an SSH daemon installed. The `smb` transport allows one to connect to a
+Windows system by installing a named pipe server, running as a Windows service. With the appropriate permissions, it is possible to remotely install a Windows
+service. Pushy does not yet have this feature, but it is planned for a future
+release.
+
+.. py:class:: Popen(command, address, username=None, password=None, domain="")
+
+   Defines the ``smb`` transport, for creating and connecting to new Python
+   interpreters on a remoe host, via Microsoft Windows Named Pipes (SMB). Pushy
+   is able to connect using native Microsoft Windows API calls, if the client
+   is running on Microsoft Windows, and the :py:mod:`ctypes` module is
+   available. Otherwise, Pushy will fall back to
+   `Impacket's <http://oss.coresecurity.com/projects/impacket.html>`_ SMB
+   module if it is available.
+
+   :param address: The address of the target host, in UNC notation.
+   :param username: The username with which to authenticate and run the remote Python process as. If omitted, the current user's username will instead be used.
+   :type username: string or None
+   :param password: The password with which to authenticate. If omitted, public-key authentication will be attempted.
+   :type password: string or None
+   :param domain: The Microsoft Windows domain with which to authenticate.
+   :type domain: string
+
+
+
+
+.. _daemon-transport:
+
+`daemon` - TCP/IP Daemon Transport
+----------------------------------
+
+.. py:module:: pushy.transport.daemon
+
+Sometimes you really do just want a long-lived server, and that's what the
+``daemon`` transport is for. In conjunction with :py:func:`pushy.server.run`,
+the ``daemon`` transport allows one to connect to a long-lived Python
+interpreter via a TCP/IP socket.
+
+.. py:class:: Popen(command, address[, port])
+
+
+   .. note:
+
+      The command argument is ignored by the ``daemon`` transport, as there is no need to create a new Python interpreter.
+
+   :param address: The hostname or IP address to which the transport connect.
+   :param port: The port to connect to, which is, by default: :py:const:`pushy.server.DEFAULT_PORT`.
+   :type port: Integer
+

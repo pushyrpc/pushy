@@ -1,0 +1,31 @@
+Nailed-Up Server Support
+========================
+
+.. py:module:: pushy.server
+
+The :py:mod:`pushy.server` module provides functions for servicing requests on
+a Pushy connection. It provides some internal functions (not documented here,
+due to their being internal) for servicing requests on a connection, and also,
+discussed below, the function :py:func:`pushy.server.run` for starting a
+nailed-up server for listening for connections.
+
+
+.. py:function:: run([port])
+
+   Create a TCP/IP socket, and service the incoming connections. This is to be
+   used in conjunction with the :py:mod:`pushy.transport.daemon` module, for
+   situations where a long-lived server process is required.
+
+   :param port: The port on which to listen for connections. If omitted, the
+                port will be :py:const:`DEFAULT_PORT`. If the string "stdio"
+                is specified, then the server will instead service a connection
+                over standard I/O.
+   :type port: Integer, or the string constant "stdio".
+
+
+.. py:data:: DEFAULT_PORT
+
+   The default port on which the Pushy server will listen for incoming
+   connections: 10101.
+
+
