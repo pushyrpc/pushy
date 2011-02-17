@@ -236,7 +236,7 @@ if native_ssh is not None:
         def scp(self, src, dest):
             args = [native_scp]
             if self.__password is not None and scp_program == "pscp.exe":
-                args.extends(["-pw", self.__password])
+                args.extend(["-pw", self.__password])
             if self.__port != 22:
                 # Both pscp and scp expect "-P" (hooray for consistency!)
                 args.extend(["-P", str(self.__port)])
