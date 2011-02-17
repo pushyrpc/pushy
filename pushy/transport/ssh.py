@@ -167,8 +167,8 @@ if native_ssh is not None:
         """
         An SSH transport for Pushy, which uses the native ssh or plink program.
         """
-        def __init__(self, command, address,
-                     username=None, password=None, **kwargs):
+        def __init__(self, command, address, username=None, password=None,
+                     port=None, **kwargs):
             """
             @param address: The hostname/address to connect to.
             @param username: The username to connect with.
@@ -189,6 +189,19 @@ if native_ssh is not None:
             if password is not None and ssh_program == "plink.exe":
                 args.extend(["-pw", password])
 
+            # If a port other than 22 is specified, add it to the arguments.
+            # Plink expects "-P", while ssh expects "-p".
+            self.__port = 22
+            if port is not None:
+                port = int(port)
+                if port != 22:
+                    self.__port = port
+                    if ssh_program == "plink.exe":
+                        args.extend(["-P", str(port)])
+                    else:
+                        args.extend(["-p", str(port)])
+
+            # Add the address and command to the arguments.
             args.extend([address, " ".join(command)])
 
             if is_windows or password is None:
@@ -222,8 +235,11 @@ if native_ssh is not None:
 
         def scp(self, src, dest):
             args = [native_scp]
-            if scp_program == "pscp.exe" and self.__password is not None:
+            if self.__password is not None and scp_program == "pscp.exe":
                 args.extends(["-pw", self.__password])
+            if self.__port != 22:
+                # Both pscp and scp expect "-P" (hooray for consistency!)
+                args.extend(["-P", str(self.__port)])
             args.extend((src, dest))
             if is_windows or self.__password is None:
                 proc = subprocess.Popen(args, stdin=subprocess.PIPE)
@@ -263,6 +279,9 @@ if native_ssh is not None:
         @param password: The password to use for authentication. If a password
                          is not specified, then native ssh/plink program is
                          used, except if L{use_native} is False.
+        @type  port: int
+        @param port: The port of the SSH daemon to connect to. If not
+                     specified, the default port of 22 will be used.
         """
 
         # Determine default value for "use_native", based on other parameters.
