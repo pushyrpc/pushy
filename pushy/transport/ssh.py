@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -39,24 +39,17 @@ except ImportError:
     paramiko = None
 
 if paramiko:
-    class SafeSSHClient(paramiko.SSHClient):
-        """
-        Subclass of paramiko.SSHClient, which makes its Transport a daemon
-        thread.
-
-        This is required to stop paramiko from hanging Python when the program
-        is finished.
-        """
-
-        def __init__(self):
-            paramiko.SSHClient.__init__(self)
-            self.load_system_host_keys()
-            self.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        def __setattr__(self, name, value):
-            if name == "_transport" and value:
-                value.setDaemon(True)
-            self.__dict__[name] = value
+    class WrappedChannelFile(object):
+        def __init__(self, file_, how):
+            self.__file = file_
+            self.__how = how
+        def close(self):
+            try:
+                self.__file.channel.shutdown(self.__how)
+            except: pass
+            return self.__file.close()
+        def __getattr__(self, name):
+            return getattr(self.__file, name)
 
     class ParamikoPopen(pushy.transport.BaseTransport):
         """
@@ -78,7 +71,9 @@ if paramiko:
             """
 
             pushy.transport.BaseTransport.__init__(self, address)
-            self.__client = SafeSSHClient()
+            self.__client = paramiko.SSHClient()
+            self.__client.load_system_host_keys()
+            self.__client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
             connect_args = {"hostname": address}
             for name in ("port", "username", "password", "pkey",
@@ -96,8 +91,8 @@ if paramiko:
             command = " ".join(args)
 
             stdin, stdout, stderr = self.__client.exec_command(command)
-            self.stdin  = stdin
-            self.stdout = stdout
+            self.stdin  = WrappedChannelFile(stdin, 1)
+            self.stdout = WrappedChannelFile(stdout, 0)
             self.stderr = stderr
             self.fs = self.__client.open_sftp()
 
