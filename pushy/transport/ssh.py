@@ -56,8 +56,13 @@ if paramiko:
         An SSH transport for Pushy, which uses Paramiko.
         """
 
-        def __init__(self, command, address, **kwargs):
+        def __init__(self, command, address,
+                     missing_host_key_policy="reject",
+                     **kwargs):
             """
+            @param missing_host_key_policy: A string describing which policy to
+                           use ('autoadd', 'warning', or 'reject'), or an
+                           object of type paramiko.MissingHostKeyPolicy.
             @param kwargs: Any parameter that can be passed to
                            U{paramiko.SSHClient.connect<http://www.lag.net/paramiko/docs/paramiko.SSHClient-class.html#connect>}.
                              - port
@@ -73,8 +78,29 @@ if paramiko:
             pushy.transport.BaseTransport.__init__(self, address)
             self.__client = paramiko.SSHClient()
             self.__client.load_system_host_keys()
-            self.__client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+            # Set the missing host key policy.
+            if type(missing_host_key_policy) is str:
+                missing_host_key_policy = missing_host_key_policy.lower()
+                if missing_host_key_policy  == "autoadd":
+                    self.__client.set_missing_host_key_policy(
+                        paramiko.AutoAddPolicy())
+                elif missing_host_key_policy == "warning":
+                    self.__client.set_missing_host_key_policy(
+                        paramiko.WarningPolicy())
+                else:
+                    if missing_host_key_policy != "reject":
+                        import warnings
+                        warnings.warn("Unknown missing host key policy: " +\
+                                      missing_host_key_policy)
+                    self.__client.set_missing_host_key_policy(
+                        paramiko.RejectPolicy())
+            else:
+                # Assume it is a user-defined policy object.
+                self.__client.set_missing_host_key_policy(
+                    missing_host_key_policy)
+
+            # Create the connection.
             connect_args = {"hostname": address}
             for name in ("port", "username", "password", "pkey",
                          "key_filename", "timeout", "allow_agent",
@@ -100,9 +126,10 @@ if paramiko:
             self.close()
 
         def close(self):
-            self.stdin.close()
-            self.stdout.close()
-            self.stderr.close()
+            if hasattr(self, "stdin"):
+                self.stdin.close()
+                self.stdout.close()
+                self.stderr.close()
             self.__client.close()
 
 
