@@ -244,6 +244,14 @@ public class Marshal
     }
 
     /**
+     * Get an 8-bit integer (byte).
+     */
+    private static byte getInt8(InputStream stream) throws IOException
+    {
+        return (byte)stream.read();
+    }
+
+    /**
      * Get a little-endian 16-bit integer.
      */
     private static short getInt16(InputStream stream) throws IOException
@@ -408,8 +416,16 @@ public class Marshal
         int size = getInt32(stream);
         if (size == 0)
             return "";
+        byte[] buf = getBytes(stream, size);
+        return new String(buf, charset);
+    }
 
+    private static byte[]
+    getBytes(InputStream stream, int size) throws IOException
+    {
         byte[] buf = new byte[size];
+        if (size == 0)
+            return buf;
         int nread = 0;
         do
         {
@@ -418,7 +434,7 @@ public class Marshal
                 throw new java.io.EOFException();
             nread += partial;
         } while (nread < buf.length);
-        return new String(buf, charset);
+        return buf;
     }
 
     /**
@@ -514,6 +530,8 @@ public class Marshal
         handlers.put(BigInteger.class, new BigIntegerHandler());
         handlers.put(String.class,     new StringHandler());
         handlers.put(Boolean.class,    new BooleanHandler());
+        handlers.put(Double.class,     new FloatHandler());
+        handlers.put(Float.class,      new FloatHandler());
 
         types.put(new Integer(Type.INT),      Integer.class);
         types.put(new Integer(Type.INT64),    Long.class);
@@ -523,6 +541,7 @@ public class Marshal
         types.put(new Integer(Type.UNICODE),  String.class);
         types.put(new Integer(Type.TRUE),     Boolean.class);
         types.put(new Integer(Type.FALSE),    Boolean.class);
+        types.put(new Integer(Type.FLOAT),    Double.class);
     }
 
     /**
@@ -610,6 +629,52 @@ public class Marshal
             if (type == Type.UNICODE)
                 return getString(stream, "UTF-8");
             return getString(stream);
+        }
+    }
+
+    public static class FloatHandler implements Handler
+    {
+        public void dump(OutputStream stream, Object value) throws IOException
+        {
+            stream.write(Type.FLOAT);
+
+            String s = format(((Number)value).doubleValue());
+            byte[] bytes = s.getBytes("ISO-8859-1");
+            putInt8(stream, (byte)bytes.length);
+            stream.write(bytes);
+        }
+
+        public Object load(InputStream stream, int type) throws IOException
+        {
+            int n = getInt8(stream);
+            byte[] buf = getBytes(stream, n);
+            if (n == 3 && buf[0] == 'n' && buf[1] == 'a' && buf[2] == 'n')
+            {
+                return new Double(Double.NaN);
+            }
+            else if (n == 3 && buf[0] == 'i' && buf[1] == 'n' && buf[2] == 'f')
+            {
+                return new Double(Double.POSITIVE_INFINITY);
+            }
+            else if (n == 4 && buf[0] == '-' && buf[1] == 'i' &&
+                     buf[2] == 'n' && buf[3] == 'f')
+            {
+                return new Double(Double.NEGATIVE_INFINITY);
+            }
+            else
+            {
+                String repr = new String(buf, "ISO-8859-1");
+                return new Double(repr);
+            }
+        }
+
+        private String format(double value)
+        {
+            if (Double.isNaN(value))
+                return "nan";
+            else if (Double.isInfinite(value))
+                return value < 0 ? "-inf" : "inf";
+            return Double.toString(value);
         }
     }
 }

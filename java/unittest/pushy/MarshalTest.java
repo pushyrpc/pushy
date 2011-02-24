@@ -149,5 +149,30 @@ public class MarshalTest extends TestCase
             new byte[]{'(', 1, 0, 0, 0, 'i', 1, 0, 0, 0},
             Marshal.dump(new int[]{1}));
     }
+
+    public void testMarshalFloat() throws Exception
+    {
+        // Floats are unmarshalled as Doubles.
+        assertEquals(
+            new Double(Double.NaN),
+            Marshal.load(Marshal.dump(new Float(Float.NaN))));
+        assertEquals(
+            new Double(Double.POSITIVE_INFINITY),
+            Marshal.load(Marshal.dump(new Float(Float.POSITIVE_INFINITY))));
+        assertEquals(
+            new Double(Double.NEGATIVE_INFINITY),
+            Marshal.load(Marshal.dump(new Float(Float.NEGATIVE_INFINITY))));
+        assertEquals(
+            new Double(1.0d), Marshal.load(Marshal.dump(new Float(1.0))));
+
+        // Doubles are unmarshalled as Doubles, so do some identity tests.
+        assertMarshalIdentity(new Double(0));
+        assertMarshalIdentity(new Double(0.3f));
+        assertMarshalIdentity(new Double(1e+19d));
+        assertMarshalIdentity(new Double(1e-19d));
+        assertMarshalIdentity(new Double(Double.NaN));
+        assertMarshalIdentity(new Double(Double.POSITIVE_INFINITY));
+        assertMarshalIdentity(new Double(Double.NEGATIVE_INFINITY));
+    }
 }
 

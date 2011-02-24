@@ -123,5 +123,36 @@ public class ProtocolTest extends TestCase
         client.evaluate("__import__('__builtin__').mymap.update({'a':1})");
         assertEquals(new Integer(1), map.get("a"));
     }
+
+    /**
+     * Ensure floats are marshalled to/from Python correctly.
+     */
+    public void testFloatMarshalling()
+    {
+        // Python -> Java
+        assertEquals(new Double(Double.NaN),
+            client.evaluate("float('nan')"));
+        assertEquals(new Double(Double.POSITIVE_INFINITY),
+            client.evaluate("float('inf')"));
+        assertEquals(new Double(Double.NEGATIVE_INFINITY),
+            client.evaluate("float('-inf')"));
+        assertEquals(new Double(1.2e34d),
+            client.evaluate("1.2e34"));
+
+        // Java -> Python
+        PushyObject id = (PushyObject)client.evaluate("lambda a: a");
+        assertEquals(
+            new Double(Double.NaN),
+            id.__call__(new Object[]{new Double(Double.NaN)}));
+        assertEquals(
+            new Double(Double.POSITIVE_INFINITY),
+            id.__call__(new Object[]{new Double(Double.POSITIVE_INFINITY)}));
+        assertEquals(
+            new Double(Double.NEGATIVE_INFINITY),
+            id.__call__(new Object[]{new Double(Double.NEGATIVE_INFINITY)}));
+        assertEquals(
+            new Double(1.2e34),
+            id.__call__(new Object[]{new Double(1.2e34)}));
+    }
 }
 
