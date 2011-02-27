@@ -77,7 +77,7 @@ public class SubprocessModule extends Module {
 
         // Set the current working directory.
         if (cwd != null)
-            kwargs.put("cwd", (String)cwd);
+            kwargs.put("cwd", cwd);
 
         // Set the environment variables for the remote process. We will create
         // a remote dictionary and copy our entries into it, so the subprocess

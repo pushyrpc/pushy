@@ -106,7 +106,7 @@ public class RemoteServerSocket extends java.net.ServerSocket
         return socket.accept();
     }
 
-    public void close()
+    public void close() throws IOException
     {
         if (!isClosed())
         {
