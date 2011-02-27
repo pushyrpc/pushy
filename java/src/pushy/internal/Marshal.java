@@ -632,7 +632,7 @@ public class Marshal
         }
     }
 
-    public static class FloatHandler implements Handler
+    private static class FloatHandler implements Handler
     {
         public void dump(OutputStream stream, Object value) throws IOException
         {
