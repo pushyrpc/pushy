@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -25,6 +25,10 @@
 
 package pushy;
 
+/**
+ * Module is the base class of all objects returned by
+ * {@link Client#getModule}.
+ */
 public class Module extends pushy.internal.DelegatingPushyObject
 {
     public Module(Client client, String name)

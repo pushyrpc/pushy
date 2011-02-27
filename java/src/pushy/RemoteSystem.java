@@ -32,6 +32,10 @@ import pushy.modules.PlatformModule;
 import pushy.modules.TimeModule;
 import pushy.modules.WinregModule;
 
+/**
+ * RemoteSystem is a class that mimics
+ * {@link java.lang.System java.lang.System}, for a remote Python process.
+ */
 public class RemoteSystem
 {
     private Client client;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -35,8 +35,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A class that mimics java.lang.ProcessBuilder, but creates processes on the
- * remote host.
+ * A class that mimics
+ * {@link java.lang.ProcessBuilder java.lang.ProcessBuilder}, but creates
+ * processes on the remote host.
  */
 public class RemoteProcessBuilder
 {

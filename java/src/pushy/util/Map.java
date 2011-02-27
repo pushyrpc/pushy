@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -33,6 +33,10 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Set;
 
+/**
+ * Wraps a remote Python object implementing the dict protocol, and presents it
+ * as a java.util.Map object. 
+ */
 public class Map extends AbstractMap implements Iterable {
     private PushyObject object;
     private PushyObject update;

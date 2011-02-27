@@ -36,7 +36,7 @@ public interface PushyObject
      * @param name The name of the attribute to determine the existence of.
      * @return True if the attribute exists, else false.
      */
-    public boolean __hasattr__(String key);
+    public boolean __hasattr__(String name);
 
     /**
      * Get an attribute with the given name.

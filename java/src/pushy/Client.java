@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -42,6 +42,10 @@ import java.util.Properties;
 import pushy.modules.ModuleFactory;
 import pushy.internal.Connection;
 
+/**
+ * The Client class manages a Pushy connection, and provides the methods to
+ * access objects in the remote Python process.
+ */
 public class Client
 {
     private static final String jarPath =

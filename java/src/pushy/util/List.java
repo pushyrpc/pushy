@@ -32,6 +32,10 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.ListIterator;
 
+/**
+ * Wraps a remote Python object implementing the list protocol, and presents it
+ * as a java.util.List object.
+ */
 public class List extends AbstractList {
     private PushyObject object;
     private PushyObject insert;

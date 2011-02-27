@@ -5,6 +5,21 @@
         <delete dir="build"/>
     </target>
 
+    <target name="doc">
+        <mkdir dir="build/doc"/>
+        <javadoc
+            destdir="build/doc"
+            sourcepath="src"
+            author="true"
+            version="true"
+            doctitle="Pushy API Documentation"
+            windowtitle="Pushy API Documentation">
+            <link
+                href="http://download.oracle.com/javase/1.4.2/docs/api/"
+                packageListURL="http://download.oracle.com/javase/1.4.2/docs/api/package-list"/>
+        </javadoc>
+    </target>
+
     <target name="compile">
         <mkdir dir="build/classes"/>
         <javac srcdir="src" destdir="build/classes" source="1.4" target="1.4">
