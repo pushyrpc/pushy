@@ -129,5 +129,34 @@ public class RemoteServerSocket extends java.net.ServerSocket
     {
         return socket == null;
     }
-}
 
+    public int getSoTimeout()
+    {
+        return socket.getSoTimeout();
+    }
+
+    public void setSoTimeout(int timeout) throws SocketException
+    {
+        socket.setSoTimeout(timeout);
+    }
+
+    public boolean getReuseAddress()
+    {
+        return socket.getReuseAddress();
+    }
+
+    public void setReuseAddress(boolean on)
+    {
+        socket.setReuseAddress(on);
+    }
+
+    public int getReceiveBufferSize()
+    {
+        return socket.getReceiveBufferSize();
+    }
+
+    public void setReceiveBufferSize(int size)
+    {
+        socket.setReceiveBufferSize(size);
+    }
+}

@@ -192,5 +192,46 @@ public class RemoteSocketTest extends TestCase
             server.close();
         }
     }
+
+    /**
+     * Ensure that the receive buffer size of RemoteServerSocket is inherited
+     * by connected sockets.
+     */
+    public void testDefaultReceiveBufferSize() throws Exception {
+        final ServerSocket server = new RemoteServerSocket(client, 0);
+        final int serverPort = server.getLocalPort();
+        server.setReceiveBufferSize(4096);
+        try {
+            // Create another thread to connect to the socket.
+            final int[] peerPort = new int[]{-1};
+            Thread thread = new Thread() {
+                public void run() {
+                    try {
+                        Socket socket = new Socket(
+                            InetAddress.getLocalHost(), serverPort);
+                        peerPort[0] = socket.getLocalPort();
+                        socket.close();
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                }
+            };
+            thread.start();
+
+            // Accept the connection.
+            Socket peer = server.accept();
+            try {
+                assertTrue(peer.isConnected());
+                assertEquals(
+                    server.getReceiveBufferSize(),
+                    peer.getReceiveBufferSize());
+                thread.join();
+            } finally {
+                peer.close();
+            }
+        } finally {
+            server.close();
+        }
+    }
 }
 

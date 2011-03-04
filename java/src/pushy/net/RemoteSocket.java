@@ -35,12 +35,17 @@ import java.net.InetAddress;
 import pushy.PushyObject;
 import pushy.Client;
 import pushy.modules.SocketModule;
+import pushy.modules.StructModule;
 
 public class RemoteSocket extends java.net.Socket
 {
     private Client client;
     private PushyObject object;
     private PushyObject accept;
+    private PushyObject getsockopt = null;
+    private PushyObject setsockopt = null;
+    private PushyObject gettimeout = null;
+    private PushyObject settimeout = null;
     private boolean bound = false;
     private boolean connected = false;
     private boolean isInputShutdown = false;
@@ -238,6 +243,203 @@ public class RemoteSocket extends java.net.Socket
     public boolean isOutputShutdown()
     {
         return isOutputShutdown;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Socket options
+    ///////////////////////////////////////////////////////////////////////////
+
+    public boolean getKeepAlive()
+    {
+        return getsockopt(SocketModule.SOL_SOCKET,
+                          SocketModule.SO_KEEPALIVE) == 1;
+    }
+
+    public void setKeepAlive(boolean on)
+    {
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_KEEPALIVE,
+                   new Integer(on ? 1 : 0));
+    }
+
+    public boolean getOOBInline()
+    {
+        return getsockopt(SocketModule.SOL_SOCKET,
+                          SocketModule.SO_OOBINLINE) == 1;
+    }
+
+    public void setOOBInline(boolean on)
+    {
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_OOBINLINE,
+                   new Integer(on ? 1 : 0));
+    }
+
+    public int getReceiveBufferSize()
+    {
+        return getsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_RCVBUF);
+    }
+
+    public void setReceiveBufferSize(int size)
+    {
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_RCVBUF,
+                   new Integer(size));
+    }
+
+    public int getSendBufferSize()
+    {
+        return getsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_SNDBUF);
+    }
+
+    public void setSendBufferSize(int size)
+    {
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_SNDBUF,
+                   new Integer(size));
+    }
+
+    public boolean getReuseAddress()
+    {
+        return getsockopt(SocketModule.SOL_SOCKET,
+                          SocketModule.SO_REUSEADDR) == 1;
+    }
+
+    public void setReuseAddress(boolean on)
+    {
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_REUSEADDR,
+                   new Integer(on ? 1 : 0));
+    }
+
+    public int getSoTimeout()
+    {
+        if (gettimeout == null) {
+            synchronized (this) {
+                if (gettimeout == null)
+                    gettimeout = (PushyObject)object.__getattr__("gettimeout");
+            }
+        }
+        Object result = gettimeout.__call__();
+        if (result == null)
+            return 0;
+        return (int)(((Number)result).doubleValue() * 1000);
+    }
+
+    public void setSoTimeout(int timeout_ms) throws SocketException
+    {
+        if (settimeout == null) {
+            synchronized (this) {
+                if (settimeout == null)
+                    settimeout = (PushyObject)object.__getattr__("settimeout");
+            }
+        }
+        if (timeout_ms == 0) {
+            settimeout.__call__(new Object[]{null});
+        } else {
+            double timeout_sec = timeout_ms / 1000.0d;
+            try {
+                settimeout.__call__(new Object[]{new Double(timeout_sec)});
+            } catch (pushy.internal.RemoteException e) {
+                SocketException e_ = new SocketException(e.getMessage());
+                e_.initCause(e);
+                throw e_;
+            }
+        }
+    }
+
+    public int getSoLinger()
+    {
+        StructModule struct_ = (StructModule)client.getModule("struct");
+        String result = getsockopt(SocketModule.SOL_SOCKET,
+                                   SocketModule.SO_LINGER,
+                                   struct_.calcsize("ii"));
+        Object[] unpacked = struct_.unpack("ii", result);
+        if (unpacked[0].equals(new Integer(0)))
+            return -1;
+        return ((Number)unpacked[1]).intValue();
+    }
+
+    public void setSoLinger(boolean on, int linger)
+    {
+        StructModule struct_ = (StructModule)client.getModule("struct");
+        setsockopt(SocketModule.SOL_SOCKET, SocketModule.SO_LINGER,
+            struct_.pack("ii", new Object[]{
+                new Integer(on ? 1 : 0), new Integer(linger)}));
+    }
+
+    public boolean getTcpNoDelay()
+    {
+        return getsockopt(SocketModule.IPPROTO_TCP,
+                          SocketModule.TCP_NODELAY) == 1;
+    }
+
+    public void setTcpNoDelay(boolean on)
+    {
+        setsockopt(SocketModule.IPPROTO_TCP, SocketModule.TCP_NODELAY,
+                   new Integer(on ? 1 : 0));
+    }
+
+    public void setTrafficClass(int tos)
+    {
+        setsockopt(SocketModule.IPPROTO_IP, SocketModule.IP_TOS,
+                   new Integer(tos));
+    }
+
+    public int getTrafficClass()
+    {
+        return getsockopt(SocketModule.IPPROTO_IP, SocketModule.IP_TOS);
+    }
+
+    private int getsockopt(SocketModule.Protocol level_,
+                           SocketModule.SocketOption option_)
+    {
+        if (getsockopt == null) {
+            synchronized (this) {
+                if (getsockopt == null)
+                    getsockopt = (PushyObject)object.__getattr__("getsockopt");
+            }
+        }
+        SocketModule module = (SocketModule)client.getModule("socket");
+        Integer level = module.getConstant(level_);
+        Integer option = module.getConstant(option_);
+        Object result = getsockopt.__call__(new Object[] {level, option});
+        return ((Number)result).intValue();
+    }
+
+    /**
+     * socket.getsockopt.
+     */
+    private String getsockopt(SocketModule.Protocol level_,
+                              SocketModule.SocketOption option_,
+                              int buflen)
+    {
+        if (getsockopt == null) {
+            synchronized (this) {
+                if (getsockopt == null)
+                    getsockopt = (PushyObject)object.__getattr__("getsockopt");
+            }
+        }
+        SocketModule module = (SocketModule)client.getModule("socket");
+        Integer level = module.getConstant(level_);
+        Integer option = module.getConstant(option_);
+        Object result = getsockopt.__call__(
+            new Object[]{level, option, new Integer(buflen)});
+        return (String)result;
+    }
+
+    /**
+     * socket.setsockopt.
+     */
+    private void
+    setsockopt(SocketModule.Protocol level_,
+               SocketModule.SocketOption option_, Object value)
+    {
+        if (setsockopt == null) {
+            synchronized (this) {
+                if (setsockopt == null)
+                    setsockopt = (PushyObject)object.__getattr__("setsockopt");
+            }
+        }
+        SocketModule module = (SocketModule)client.getModule("socket");
+        Integer level = module.getConstant(level_);
+        Integer option = module.getConstant(option_);
+        setsockopt.__call__(new Object[] {level, option, value});
     }
 }
 

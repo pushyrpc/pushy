@@ -46,6 +46,7 @@ public class ModuleFactory {
         classes.put("shutil", ShutilModule.class);
         classes.put("socket", SocketModule.class);
         classes.put("stat", StatModule.class);
+        classes.put("struct", StructModule.class);
         classes.put("tempfile", TempfileModule.class);
         classes.put("time", TimeModule.class);
         classes.put("_winreg", WinregModule.class);
