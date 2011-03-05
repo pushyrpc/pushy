@@ -10,6 +10,7 @@
         <javadoc
             destdir="build/doc"
             sourcepath="src"
+            additionalparam="-notimestamp"
             author="true"
             version="true"
             doctitle="Pushy API Documentation"
