@@ -70,6 +70,7 @@ setup(
     author="Andrew Wilkins",
     author_email="axwalk@gmail.com",
     url="http://launchpad.net/pushy/",
-    packages=["pushy", "pushy.protocol", "pushy.transport", "pushy.util"]
+    packages=["pushy", "pushy.protocol", "pushy.transport",
+              "pushy.transport.smb", "pushy.util"]
 )
 
