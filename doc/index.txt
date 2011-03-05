@@ -52,6 +52,9 @@ on the local host.
 Resources
 ---------
 
+Home Page
+    http://awilkins.id.au/pushy
+
 Download
     http://launchpad.net/pushy/+download
 

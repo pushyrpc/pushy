@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -53,7 +53,7 @@ L{pushy.connect<pushy.connect>}. This function will return a connection object,
 which provides access to the remote interpreter's modules, whose classes,
 objects and functions can be transparently accessed from the local interpreter.
 
-@version: 0.3
+@version: 0.4
 @author: Andrew Wilkins
 @contact: axwalk@gmail.com
 @license: MIT

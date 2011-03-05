@@ -119,7 +119,7 @@ fly, but Pushy doesn't need to be installed on the remote host, and nothing is
 transferred onto the remote filesystem. The ssh transport makes Pushy a safe
 alternative to traditional nailed-up, privileged services.
 
-.. py:class:: Popen(command, address, username=None, password=None, use_native=None)
+.. py:class:: Popen(command, address, username=None, password=None, use_native=None, port=None, missing_host_key_policy="reject")
 
    Defines the ``ssh`` transport, for creating and connecting to new Python
    interpreters on a remote host, via SSH (Secure Shell).  Pushy is able to
@@ -138,6 +138,10 @@ alternative to traditional nailed-up, privileged services.
    :type password: string or None
    :param use_native: On Windows, Paramiko has been found to be faster than PuTTy, and so it is the default. On other platforms, the native ``ssh`` program is preferred. The preference may be overridden by passing a boolean value as the use_native argument.
    :type use_native: bool or None
+   :param port: The port of the SSH daemon to connect to, or None to use the default port.
+   :type port: int or None
+   :param missing_host_key_policy: The policy to set for the Paramiko SSH transport to decide what happens when connecting to a host with an unknown host key. This parameter has a default value of "reject", and can be assigned one of the values "reject", "autoadd", or "warning". This parameter is ignored by the native SSH transport.
+   :type missing_host_key_policy: string
 
    .. py:method:: getfile(source_path, destination_path)
 

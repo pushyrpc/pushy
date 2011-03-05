@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -62,7 +62,7 @@ dependencies = [
 
 setup(
     name="pushy",
-    version="0.3",
+    version="0.4",
     description = description,
     long_description = long_description,
     classifiers = classifiers,
