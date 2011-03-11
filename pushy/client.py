@@ -221,7 +221,12 @@ def pushy_server(stdin, stdout):
 quiet_import = """
 def quiet_import(name):
     try:
-        return __import__(name)
+        module = __import__(name)
+        # Traverse down to the target module.
+        if "." in name:
+            for part in name.split(".")[1:]:
+                module = getattr(module, part)
+        return module
     except ImportError:
         return None
 """.strip()
@@ -240,12 +245,17 @@ class AutoImporter(object):
 
     def __getattr__(self, name):
         try:
-            value = self.__import(name)
-            if value is not None:
-                return value
+            value = self.remote_import(name)
+            # Modify the module proxy to automatically import modules in
+            # the same manner as this auto-importer on a failed getattr.
+            value._ModuleProxy__importer = lambda name: getattr(self, name)
+            return value
         except:
             pass
         return object.__getattribute__(self, name)
+
+    def remote_import(self, name):
+        return self.__import(name)
 
 ###############################################################################
 
@@ -448,6 +458,9 @@ class PushyClient(object):
             self.close()
         except:
             pass
+
+    def remote_import(self, name):
+        return self.modules.remote_import(name)
 
     def eval(self, code, globals=None, locals=None):
         return self.remote.eval(code, globals, locals)

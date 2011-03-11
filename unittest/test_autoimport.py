@@ -39,6 +39,18 @@ class TestAutoImport(unittest.TestCase):
         self.assertEquals(platform.system(),
                           self.conn.modules.platform.system())
 
+    def test_submodule(self):
+        # By design, if you manually import a package, its modules will not be
+        # automatically imported.
+        manual = self.conn.remote_import("pushy")
+        self.assertFalse(hasattr(manual, "transport"))
+
+        # Ensure we can import modules within packages easily.
+        manual = self.conn.remote_import("pushy.transport")
+        # This would previously have failed.
+        auto = self.conn.modules.pushy.transport
+        self.assert_(manual is auto)
+
 if __name__ == "__main__":
     unittest.main()
 

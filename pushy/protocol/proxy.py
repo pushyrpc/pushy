@@ -142,8 +142,15 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
             def __init__(self):
                 on_proxy_init(self, id_)
                 types.ModuleType.__init__(self, "")
+                self.__importer = None
             def __getattribute__(self, name):
-                return conn.getattr(self, name)
+                try:
+                    return conn.getattr(self, name)
+                except AttributeError:
+                    if self.__importer:
+                        return self.__importer(self.__name__ + "." + name)
+                    else:
+                        raise
         ProxyClass = ModuleProxy
     else:
         class ObjectProxy(object):
