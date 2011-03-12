@@ -1,4 +1,4 @@
-# Copyright (c) 2008 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -28,23 +28,37 @@ sys.path.append(os.path.join(thisdir, ".."))
 
 import pushy, unittest
 
-class TestEval(unittest.TestCase):
+class TestCompile(unittest.TestCase):
     def setUp(self):
         self.conn = pushy.connect("local:")
     def tearDown(self):
         self.conn.close()
 
-    def test_eval_expr(self):
-        self.assertEquals(self.conn.eval("1+2"), 3)
+    def test_lambda(self):
+        osgetpid = lambda: os.getpid()
+        remote_lambda = self.conn.compile(osgetpid)
+        self.assertEquals(os.getpid(), osgetpid())
+        self.assertEquals(self.conn.modules.os.getpid(), remote_lambda())
 
-    def test_throw(self):
-        self.assertRaises(Exception, self.conn.eval, "1/0")
+    def test_function(self):
+        def function_with_defaults(a, b=2):
+            return a + b
+        remote_function = self.conn.compile(function_with_defaults)
+        self.assertEquals(3, remote_function(1, 2))
+        self.assertEquals(3, remote_function(1))
+        self.assertEquals(3, remote_function(a=1, b=2))
 
-    def test_execute(self):
+    def test_compile_eval(self):
+        code = self.conn.compile("lambda a,b: a+b", "eval")
+        lambda_ = self.conn.eval(code)
+        self.assertEquals(3, lambda_(1, 2))
+
+    def test_compile_exec(self):
+        code = self.conn.compile("def abc(a, b):\n\treturn a+b", "exec")
         locals_ = {}
-        self.conn.execute("x = 123", locals=locals_)
-        self.assertTrue("x" in locals_)
-        self.assertEquals(123, locals_["x"])
+        self.conn.eval(code, locals=locals_)
+        self.assertTrue("abc" in locals_)
+        self.assertEquals(3, locals_["abc"](1, 2))
 
 if __name__ == "__main__":
     unittest.main()

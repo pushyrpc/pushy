@@ -26,7 +26,7 @@ This module provides the code to used to start a remote Pushy server running,
 and initiate a connection.
 """
 
-import __builtin__, imp, marshal, os, sys, marshal, os, struct
+import __builtin__, imp, inspect, marshal, os, sys, marshal, os, struct
 import threading, cPickle as pickle
 
 # Import zipimport, for use in PushyPackageLoader.
@@ -426,7 +426,9 @@ class PushyClient(object):
             self.serve_thread = None
             raise
 
+
     def __putfile(self, local, remote):
+        "Transport-independent fallback for putfile."
         f_read = open(local, "rb")
         f_write = self.modules.__builtin__.open(remote, "wb")
         try:
@@ -438,7 +440,9 @@ class PushyClient(object):
             f_write.close()
             f_read.close()
 
+
     def __getfile(self, remote, local):
+        "Transport-independent fallback for getfile."
         f_read = self.modules.__builtin__.open(remote, "rb")
         try:
             f_write = open(local, "wb")
@@ -452,15 +456,18 @@ class PushyClient(object):
         finally:
             f_read.close()
 
+
     def __del__(self):
         try:
             self.close()
         except:
             pass
 
+
     def remote_import(self, name):
         "Import a remote Python module."
         return self.modules.remote_import(name)
+
 
     def eval(self, code, globals=None, locals=None):
         """
@@ -468,6 +475,45 @@ class PushyClient(object):
         interpreter.
         """
         return self.remote.eval(code, globals, locals)
+
+
+    def compile(self, source, mode="exec"):
+        """
+        Compiles Python source into a code object, or a local function into a
+        remotely defined function that executes wholly in the remote Python
+        interpreter.
+        """
+
+        if inspect.isfunction(source):
+            func = source
+            try:
+                remote_compile = self.eval("compile")
+
+                # Get and unindent the source.
+                source = inspect.getsourcelines(func)[0]
+                unindent_len = len(source[0]) - len(source[0].lstrip())
+                source = "".join([l[unindent_len:] for l in source])
+
+                code = remote_compile(source, inspect.getfile(func), "exec")
+                locals = {}
+                self.eval(code, locals=locals)
+                # We can't use func_name, because that doesn't apply to
+                # lambdas. Lambdas seem to have their assigned name built-in,
+                # but I'm not sure how to extract it.
+                return locals.values()[0]
+            except IOError:
+                from pushy.util.clone_function import clone_function
+                return self.compile(clone_function)(func)
+        else:
+            return self.eval("compile")(source, "<pushy>", mode)
+
+
+    def execute(self, source, globals=None, locals=None):
+        """
+        Shortcut for self.eval(self.compile(source), globals, locals).
+        """
+        self.eval(self.compile(source), globals, locals)
+
 
     def close(self):
         "Close the connection."
@@ -477,6 +523,7 @@ class PushyClient(object):
             self.serve_thread.join()
         if self.server is not None:
             self.server.close()
+
 
     def __load_packages(self):
         if self.pushy_packages is None:
@@ -488,6 +535,7 @@ class PushyClient(object):
             finally:
                 self.packages_lock.release()
         return self.pushy_packages
+
 
     def enable_logging(self, client=True, server=False):
         global logid
