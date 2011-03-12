@@ -47,7 +47,34 @@ Application Programming Interface (API)
           4772
           >>> conn.modules.os.getpid()
           5564
-          
+
+
+    .. py:method:: close()
+
+       Close the connection.
+
+         >>> conn = pushy.connect("local:")
+         >>> conn.close()
+
+
+    .. py:method:: eval(code, [globals=None, [locals=None]])
+
+       Evaluate an expression or code object in the remote Python interpreter.
+
+       :param code: A string representing a Python expression, or a code object
+                    as returned by compile().
+       :type code: string or code
+       :param globals: A dictionary for global variables. If ``locals`` is not
+                       specified, then ``globals`` will be used for both global
+                       and local variables.
+       :type globals: dict
+       :param locals: A dictionary for local variables.
+       :type locals: any mapping type
+
+       >>> conn = pushy.connect("local:")
+       >>> assert conn.eval("1+2") == 3
+       >>> remote_str_type = conn.eval("str")
+
 
     .. py:method:: getfile(remote_path, local_path)
 
@@ -59,6 +86,7 @@ Application Programming Interface (API)
          >>> conn = pushy.connect("local:")
          >>> conn.getfile("/remote/path/to/foo.txt", "/local/path/to/bar.txt")
 
+
     .. py:method:: putfile(local_path, remote_path)
 
        Copy a file from the local host to the remote host. If the transport
@@ -68,4 +96,13 @@ Application Programming Interface (API)
 
          >>> conn = pushy.connect("local:")
          >>> conn.putfile("/local/path/to/foo.txt", "/remote/path/to/bar.txt")
+
+
+    .. py::method:: remote_import(name)
+
+       Import a remote Python module.
+
+         >>> conn = pushy.connect("local:")
+         >>> os_path = conn.remote_import("os.path")
+         >>> remote_home = os_path.expanduser("~")
 

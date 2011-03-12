@@ -378,7 +378,7 @@ class PushyClient(object):
                 self.server.stdin.write(serverSource)
                 self.server.stdin.flush()
                 # Send the packages over to the server
-                packages = self.load_packages()
+                packages = self.__load_packages()
                 pickle.dump(packages, self.server.stdin)
                 self.server.stdin.flush()
 
@@ -392,17 +392,6 @@ class PushyClient(object):
             self.serve_thread.setDaemon(True)
             self.serve_thread.start()
 
-            modules_ = AutoImporter(remote)
-            rsys = modules_.sys
-            rsys.stdout = sys.stdout
-            rsys.stderr = sys.stderr
-
-            # Specify the filesystem interface
-            if hasattr(self.server, "fs"):
-                self.fs = self.server.fs
-            else:
-                self.fs = modules_.os
-
             # putfile/getfile
             self.putfile = getattr(self.server, "putfile", self.__putfile)
             self.getfile = getattr(self.server, "getfile", self.__getfile)
@@ -411,8 +400,18 @@ class PushyClient(object):
             """The L{connection<pushy.protocol.Connection>} for the remote
                interpreter"""
 
-            self.modules = modules_
+            # Create an auto-importer.
+            self.modules = AutoImporter(self)
             "An instance of L{AutoImporter} for the remote interpreter."
+            rsys = self.modules.sys
+            rsys.stdout = sys.stdout
+            rsys.stderr = sys.stderr
+
+            # Specify the filesystem interface
+            if hasattr(self.server, "fs"):
+                self.fs = self.server.fs
+            else:
+                self.fs = self.modules.os
         except:
             import traceback
             traceback.print_exc()
@@ -460,12 +459,18 @@ class PushyClient(object):
             pass
 
     def remote_import(self, name):
+        "Import a remote Python module."
         return self.modules.remote_import(name)
 
     def eval(self, code, globals=None, locals=None):
+        """
+        Evaluate an expression or code object in the remote Python
+        interpreter.
+        """
         return self.remote.eval(code, globals, locals)
 
     def close(self):
+        "Close the connection."
         if self.remote is not None:
             self.remote.close()
         if self.serve_thread is not None:
@@ -473,7 +478,7 @@ class PushyClient(object):
         if self.server is not None:
             self.server.close()
 
-    def load_packages(self):
+    def __load_packages(self):
         if self.pushy_packages is None:
             self.packages_lock.acquire()
             try:
