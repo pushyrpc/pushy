@@ -57,6 +57,24 @@ Application Programming Interface (API)
          >>> conn.close()
 
 
+    .. py:method:: compile(code, [mode="exec"])
+
+       Compiles Python source or function objects in the remote Python
+       interpreter, returning proxied code objects or function objects
+       respectively.
+
+       :param code: A string representing a Python expression, or a function
+                    object to be recompiled in the remote interpreter.
+       :type code: string or function
+       :param mode: The compilation mode for compiling Python source (ignored
+                    for function compilation).
+       :type mode: string
+
+       >>> conn = pushy.connect("local:")
+       >>> conn.compile("1+2", "eval")      # Returns a code object.
+       >>> conn.compile(lambda a, b: a + b) # Returns a function object.
+
+
     .. py:method:: eval(code, [globals=None, [locals=None]])
 
        Evaluate an expression or code object in the remote Python interpreter.
@@ -74,6 +92,27 @@ Application Programming Interface (API)
        >>> conn = pushy.connect("local:")
        >>> assert conn.eval("1+2") == 3
        >>> remote_str_type = conn.eval("str")
+
+
+    .. py:method:: execute(source, [globals=None, [locals=None]])
+
+       Executes Python source code in the remote interpreter. This is a
+       shortcut to ``eval(compile(source), globals, locals)``.
+
+       :param source: A stirng representing a Python statement.
+       :type source: string
+       :param globals: A dictionary for global variables. If ``locals`` is not
+                       specified, then ``globals`` will be used for both global
+                       and local variables.
+       :type globals: dict
+       :param locals: A dictionary for local variables.
+       :type locals: any mapping type
+
+       >>> conn = pushy.connect("local:")
+       >>> locals_ = {}
+       >>> conn.execute("def abc():\n\tprint 123", locals=locals_)
+       >>> locals_["abc"]()
+       123
 
 
     .. py:method:: getfile(remote_path, local_path)
