@@ -21,11 +21,10 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, marshal, os, struct, sys, thread, threading
+import logging, marshal, os, struct, sys, thread, threading, weakref
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, proxy_types
 import pushy.util
-
 
 # This collection should contain only immutable types. Builtin, mutable types
 # such as list, set and dict need to be handled specially.
@@ -101,6 +100,7 @@ class BaseConnection(object):
         self.message_handlers = {
             MessageType.response:    self.__handle_response,
             MessageType.exception:   self.__handle_exception,
+            MessageType.delete:      self.__handle_delete
         }
 
         # Attributes required to track responses.
@@ -134,7 +134,7 @@ class BaseConnection(object):
                     open("%d-%d.out" % (os.getpid(), self.__connid),"wb"))
 
         # (Client) Contains mapping of id(obj) -> proxy
-        self.__proxies = {}
+        self.__proxies = weakref.WeakValueDictionary()
         # (Client) Contains mapping of id(obj) -> threading.Event, which
         # __unmarshal will use to synchronise the order of messages.
         self.__pending_proxies = {}
@@ -162,11 +162,14 @@ Response Count:       %r
 Request Count:        %r
 Thread Request Count: %r
 Peer Thread:          %r
+Proxy Count:          %r
+Proxied Object Count: %r
         """.strip()
         state_args = (self.__connid, self.__open, self.__receiving,
                       self.__processing, self.__waiting, self.__responses,
                       len(self.__requests), self.__thread_request_count,
-                      self.__peer_thread)
+                      self.__peer_thread, len(self.__proxies),
+                      len(self.__proxied_objects))
         pushy.util.logger.debug("\n"+state_format, *state_args)
 
 
@@ -598,4 +601,28 @@ Peer Thread:          %r
 
     def __handle_exception(self, message_type, e):
         raise e
+
+
+    def __handle_delete(self, message_type, id_):
+        del self.__proxied_objects[id_]
+
+
+    def delete(self, obj):
+        """
+        Delete the proxy, and request the peer to delete the original proxied
+        object.
+        """
+
+        id_proxy = id(obj)
+        try:
+            # If the connection is not closed, send a message to the peer to
+            # delete its copy.
+            if self.__open:
+                id_orig = self.__proxy_ids[id_proxy]
+                self.send_request(MessageType.delete, id_orig)
+        finally:
+            # Remove the object's ID from self.__proxy_ids. We don't need to
+            # remove it from self.__proxies, since it's a weak value
+            # dictionary.
+            del self.__proxy_ids[id_proxy]
 

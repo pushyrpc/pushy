@@ -170,15 +170,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     ProxyClass.pushy_operator_mask = opmask
     ProxyClass.pushy_proxy_type = proxy_type
 
-    # Callable for delegating to an operator on the remote object.
-    class Operator:
-        def __init__(self, type_):
-            self.type_ = type_
-            self.object = None
-        def __repr__(self):
-            return repr(self.type_)
-        def __call__(self, *args, **kwargs):
-            return conn.operator(self.type_, self.object, args, kwargs)
+    # Creates a lambda with the operator type and connection bound.
+    def bound_operator(type_):
+        return lambda self, *args, **kwargs: \
+            (conn.operator(type_, self, args, kwargs))
 
     # Create proxy operators.
     operators = []
@@ -186,34 +181,22 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     while opmask:
         if opmask & 1:
             type_ = message_types[op_index]
-            method = Operator(type_)
+            method = bound_operator(type_)
             setattr(ProxyClass, type_.name[2:], method)
-            operators.append(method)
         opmask >>= 1
         op_index -= 1
 
-    # Add __str__ and __repr__ methods
-    def method(self):
-        return conn.getstr(self)
-    setattr(ProxyClass, "__str__", method)
-    def method(self):
-        return conn.getrepr(self)
-    setattr(ProxyClass, "__repr__", method)
+    # Add other standard methods.
+    setattr(ProxyClass, "__del__", lambda self: conn.delete(self))
+    setattr(ProxyClass, "__str__", lambda self: conn.getstr(self))
+    setattr(ProxyClass, "__repr__", lambda self: conn.getrepr(self))
+    setattr(ProxyClass, "__setattr__", lambda *args: conn.setattr(*args))
 
     # Make sure we support the iteration protocol properly
     #if hasattr(ProxyClass, "__iter__"):
-    def method(self):
-        return conn.getattr(self, "next")()
-    setattr(ProxyClass, "next", method)
+    setattr(ProxyClass, "next", lambda self: conn.getattr(self, "next")())
 
-    def method(self, name, value):
-        return conn.setattr(self, name, value)
-    setattr(ProxyClass, "__setattr__", method)
-
-    proxy = ProxyClass()
-    for operator in operators:
-        operator.object = proxy
-    return proxy
+    return ProxyClass()
 
 
 ###############################################################################

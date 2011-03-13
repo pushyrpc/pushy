@@ -118,6 +118,7 @@ message_names = (
   "setattr",
   "getstr",
   "getrepr",
+  "delete",
 
   # All object ops go at the end
   "op__call__",
