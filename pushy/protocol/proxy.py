@@ -58,6 +58,8 @@ class ProxyType:
             return ProxyType.list
         if isinstance(obj, types.ModuleType):
             return ProxyType.module
+        if isinstance(obj, types.ClassType):
+            return ProxyType.oldstyleclass
         return ProxyType.object
 
     @staticmethod
@@ -152,6 +154,19 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
                     else:
                         raise
         ProxyClass = ModuleProxy
+    elif proxy_type == ProxyType.oldstyleclass:
+        class ClassObjectProxy:
+            def __init__(self):
+                on_proxy_init(self, id_)
+            def __call__(self, *args, **kwargs):
+                message_type = pushy.protocol.message.MessageType.op__call__
+                return conn.operator(message_type, self, args, kwargs)
+            def __getattr__(self, name):
+                print "~" + name
+                if name == "__call__":
+                    raise AttributeError, "__call__"
+                return conn.getattr(self, name)
+        ProxyClass = ClassObjectProxy
     else:
         class ObjectProxy(object):
             def __init__(self):
@@ -215,6 +230,7 @@ class ProxyObject(object):
 ###############################################################################
 
 proxy_names = (
+  "oldstyleclass",
   "object",
   "exception",
   "dictionary",

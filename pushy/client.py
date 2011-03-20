@@ -558,7 +558,7 @@ class PushyClient(object):
             self.modules.pushy.util.logger.addHandler(
                 self.modules.logging.FileHandler(filename))
             self.modules.pushy.util.logger.setLevel(self.modules.logging.DEBUG)
-            pushy.util.logger.disabled = True
+            self.modules.pushy.util.logger.disabled = False
 
 
 def connect(target, **kwargs):
