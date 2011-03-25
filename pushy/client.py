@@ -546,7 +546,10 @@ class PushyClient(object):
             filename = "pushy-client.%d.log" % logid
             if os.path.exists(filename):
                 os.remove(filename)
-            pushy.util.logger.addHandler(logging.FileHandler(filename))
+            handler = logging.FileHandler(filename)
+            handler.setFormatter(logging.Formatter(
+                "[%(process)d:(%(threadName)s:%(thread)d)] %(message)s"))
+            pushy.util.logger.addHandler(handler)
             pushy.util.logger.setLevel(logging.DEBUG)
             pushy.util.logger.disabled = False
 
@@ -555,8 +558,10 @@ class PushyClient(object):
             ros = self.modules.os
             if ros.path.exists(filename):
                 ros.remove(filename)
-            self.modules.pushy.util.logger.addHandler(
-                self.modules.logging.FileHandler(filename))
+            handler = self.modules.logging.FileHandler(filename)
+            handler.setFormatter(self.modules.logging.Formatter(
+                "[%(process)d:(%(threadName)s:%(thread)d)] %(message)s"))
+            self.modules.pushy.util.logger.addHandler(handler)
             self.modules.pushy.util.logger.setLevel(self.modules.logging.DEBUG)
             self.modules.pushy.util.logger.disabled = False
 
