@@ -22,6 +22,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import os, struct, thread
+import marshal
 import pushy.util
 
 class MessageType:
@@ -42,6 +43,21 @@ class MessageType:
         if type(other) is int: return other == self.code
         elif type(other) is str: return other == self.name
         return other.__class__ is MessageType and other.code == self.code
+
+
+def read(file, length):
+    # Read message payload.
+    data = ""
+    if length:
+        while len(data) < length:
+            try:
+                partial = file.read(length - len(data))
+            except Exception, e:
+                raise IOError, e
+            if partial == "":
+                raise IOError, "End of file"
+            data += partial
+    return data
 
 
 class Message:
@@ -69,42 +85,19 @@ class Message:
                     len(self.payload))
 
     def pack(self):
-        result = struct.pack(self.PACKING_FORMAT, int(self.type), self.source,
-                             self.target, len(self.payload))
-        return result + self.payload
+        return struct.pack(self.PACKING_FORMAT, int(self.type),
+                           self.source, self.target,
+                           len(self.payload)) + self.payload
 
     @staticmethod
     def unpack(file):
-        # Read the message header.
-        data = ""
-        while len(data) < Message.PACKING_SIZE:
-            try:
-                partial = file.read(Message.PACKING_SIZE - len(data))
-            except Exception, e:
-                raise IOError, e
-            if partial == "":
-                raise IOError, "End of file"
-            data += partial
+        header = read(file, Message.PACKING_SIZE)
         (type, source, target, length) = \
-            struct.unpack(Message.PACKING_FORMAT, data)
+            struct.unpack(Message.PACKING_FORMAT, header)
         type = message_types[type]
-
-        # Read message payload.
-        payload = ""
-        if length:
-            while len(payload) < length:
-                try:
-                    partial = file.read(length - len(payload))
-                except Exception, e:
-                    raise IOError, e
-                if partial == "":
-                    raise IOError, "End of file"
-                payload += partial
-
-        pushy.util.logger.debug(
-            "Read %d, %r %r", len(data) + len(payload),
-            data + payload, (type, source, target, length))
+        payload = read(file, length)
         return Message(type, payload, target, source)
+
 
 ###############################################################################
 # Create enumeration of message types

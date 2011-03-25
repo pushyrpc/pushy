@@ -155,9 +155,7 @@ class BaseConnection(object):
         if self.__open:
             self.close()
 
-
-    def __log_state(self):
-        state_format = """
+    STATE_FORMAT = """
 Connection State
 ------------------------
 ID:                   %r
@@ -171,13 +169,15 @@ Thread Request Count: %r
 Peer Thread:          %r
 Proxy Count:          %r
 Proxied Object Count: %r
-        """.strip()
+""".strip()
+
+    def __log_state(self):
         state_args = (self.__connid, self.__open, self.__receiving,
                       self.__processing, self.__waiting, self.__responses,
                       len(self.__requests), self.__thread_request_count,
                       self.__peer_thread, len(self.__proxies),
                       len(self.__proxied_objects))
-        pushy.util.logger.debug("\n"+state_format, *state_args)
+        pushy.util.logger.debug("\n"+self.STATE_FORMAT, *state_args)
 
 
     # Property for determining the number of requests the current thread is
@@ -418,7 +418,7 @@ Proxied Object Count: %r
 
         # If it's a tuple, try to marshal each item individually.
         if type(obj) is tuple:
-            return (MARSHAL_TUPLE, tuple(map(self.__marshal, obj)))
+            return (MARSHAL_TUPLE, map(self.__marshal, obj))
 
         i = id(obj)
         if i in self.__proxied_objects:
