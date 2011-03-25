@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -105,9 +105,9 @@ class BaseConnection(object):
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
-            MessageType.response:    self.__handle_response,
-            MessageType.exception:   self.__handle_exception,
-            MessageType.delete:      self.__handle_delete
+            MessageType.response:  self.__handle_response,
+            MessageType.exception: self.__handle_exception,
+            MessageType.delete:    self.__handle_delete
         }
 
         # Attributes required to track responses.
@@ -606,9 +606,8 @@ Proxied Object Count: %r
         try:
             # If the connection is not closed, send a message to the peer to
             # delete its copy.
-            if self.__open:
-                id_orig = self.__proxy_ids[id_proxy]
-                self.send_request(MessageType.delete, id_orig)
+            id_orig = self.__proxy_ids[id_proxy]
+            self.send_request(MessageType.delete, id_orig)
         finally:
             # Remove the object's ID from self.__proxy_ids. We don't need to
             # remove it from self.__proxies, since it's a weak value

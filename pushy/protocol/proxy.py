@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -36,10 +36,13 @@ class ProxyType(object):
         return self.name
     def __int__(self):
         return self.code
+    def __hash__(self):
+        return self.code
     def __eq__(self, other):
+        if type(other) is ProxyType: return other.code == self.code
         if type(other) is int: return other == self.code
         elif type(other) is str: return other == self.name
-        return other.__class__ is ProxyType and other.code == self.code
+        return False
 
     @staticmethod
     def get(obj):

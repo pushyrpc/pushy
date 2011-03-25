@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -25,7 +25,8 @@ import os, struct, thread
 import marshal
 import pushy.util
 
-class MessageType:
+
+class MessageType(object):
     "A class for describing the type of a message."
 
     def __init__(self, code, name):
@@ -40,9 +41,10 @@ class MessageType:
     def __hash__(self):
         return self.code
     def __eq__(self, other):
-        if type(other) is int: return other == self.code
+        if type(other) is MessageType: return other.code == self.code
+        elif type(other) is int: return other == self.code
         elif type(other) is str: return other == self.name
-        return other.__class__ is MessageType and other.code == self.code
+        return False
 
 
 def read(file, length):
