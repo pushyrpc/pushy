@@ -470,15 +470,17 @@ Proxied Object Count: %r
                     id_[0], id_[1], proxy_types[id_[2]])
 
                 # New object: (id, opmask, object_type, args)
-                p = Proxy(id_[0], id_[1], id_[2], id_[3], self,
-                          self.__register_proxy)
+                id_, opmask, object_type, args = id_
+                register_proxy = \
+                    lambda proxy: self.__register_proxy(proxy, id_)
+                p = Proxy(opmask, object_type, args, self, register_proxy)
 
                 # Wake anyone waiting on this ID to be unmarshalled.
                 self.__unmarshal_lock.acquire()
                 try:
-                    if id_[0] in self.__pending_proxies:
-                        event = self.__pending_proxies[id_[0]]
-                        del self.__pending_proxies[id_[0]]
+                    if id_ in self.__pending_proxies:
+                        event = self.__pending_proxies[id_]
+                        del self.__pending_proxies[id_]
                         event.set()
                 finally:
                     self.__unmarshal_lock.release()

@@ -26,7 +26,7 @@ import pushy.util
 import exceptions, types
 
 
-class ProxyType:
+class ProxyType(object):
     def __init__(self, code, name):
         self.code = code
         self.name = name
@@ -85,96 +85,138 @@ class ProxyType:
         if hasattr(class_, "pushy_operator_mask"):
             return class_.pushy_operator_mask
         else:
-            mask = 0L
-            for t in message_types:
-                if t.name.startswith("op__"):
-                    mask <<= 1
-                    if hasattr(obj, t.name[2:]):
-                        mask = mask + 1
+            mask = sum((
+                (1 << t.code) for t in message_types \
+                if t.name.startswith("op__") and hasattr(obj, t.name[2:])
+            ))
             return mask
 
 
-def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
+proxy_names = (
+  "oldstyleclass",
+  "object",
+  "exception",
+  "dictionary",
+  "list",
+  "set",
+  "module"
+)
+proxy_types = []
+for i,t in enumerate(proxy_names):
+    p = ProxyType(i, t)
+    proxy_types.append(p)
+    setattr(ProxyType, t, p)
+
+
+###############################################################################
+
+
+def create_instance(args, conn, on_proxy_init):
+    class ClassObjectProxy:
+        def __init__(self):
+            on_proxy_init(self)
+        def __call__(self, *args, **kwargs):
+            message_type = pushy.protocol.message.MessageType.op__call__
+            return conn.operator(message_type, self, args, kwargs)
+        def __getattr__(self, name):
+            if name == "__call__":
+                raise AttributeError, "__call__"
+            return conn.getattr(self, name)
+    return ClassObjectProxy
+
+
+def create_object(args, conn, on_proxy_init):
+    class ObjectProxy(object):
+        def __init__(self):
+            on_proxy_init(self)
+            object.__init__(self)
+        def __getattribute__(self, name):
+            return conn.getattr(self, name)
+    return ObjectProxy
+
+
+def create_exception(args, conn, on_proxy_init):
+    BaseException = Exception
+    if args is not None:
+        BaseException = getattr(exceptions, args)
+    class ExceptionProxy(BaseException):
+        def __init__(self):
+            on_proxy_init(self)
+            BaseException.__init__(self)
+        def __getattribute__(self, name):
+            return conn.getattr(self, name)
+    return ExceptionProxy
+
+
+def create_dictionary(args, conn, on_proxy_init):
+    class DictionaryProxy(dict):
+        def __init__(self):
+            on_proxy_init(self)
+            if args is not None:
+                dict.__init__(self, args)
+            else:
+                dict.__init__(self)
+        def __getattribute__(self, name):
+            return conn.getattr(self, name)
+    return DictionaryProxy
+
+
+def create_list(args, conn, on_proxy_init):
+    class ListProxy(list):
+        def __init__(self):
+            on_proxy_init(self)
+            list.__init__(self, args)
+        def __getattribute__(self, name):
+            return conn.getattr(self, name)
+    return ListProxy
+
+
+def create_set(args, conn, on_proxy_init):
+    class SetProxy(set):
+        def __init__(self):
+            on_proxy_init(self)
+            set.__init__(self, args)
+        def __getattribute__(self, name):
+            return conn.getattr(self, name)
+    return SetProxy
+
+
+def create_module(args, conn, on_proxy_init):
+    class ModuleProxy(types.ModuleType):
+        def __init__(self):
+            on_proxy_init(self)
+            types.ModuleType.__init__(self, "")
+            self.__importer = None
+        def __getattribute__(self, name):
+            try:
+                return conn.getattr(self, name)
+            except AttributeError:
+                if self.__importer:
+                    return self.__importer(self.__name__ + "." + name)
+                else:
+                    raise
+    return ModuleProxy
+
+
+class_factories = {
+    ProxyType.oldstyleclass: create_instance,
+    ProxyType.object:        create_object,
+    ProxyType.exception:     create_exception,
+    ProxyType.dictionary:    create_dictionary,
+    ProxyType.list:          create_list,
+    ProxyType.set:           create_set,
+    ProxyType.module:        create_module
+}
+
+def Proxy(opmask, proxy_type, args, conn, on_proxy_init):
     """
     Create a proxy object, which delegates attribute access and method
     invocation to an object in a remote Python interpreter.
     """
 
     # Determine the class to use for the proxy type.
-    if proxy_type == ProxyType.exception:
-        BaseException = Exception
-        if args is not None:
-            BaseException = getattr(exceptions, args)
-        class ExceptionProxy(BaseException):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                BaseException.__init__(self)
-            def __getattribute__(self, name):
-                return conn.getattr(self, name)
-        ProxyClass = ExceptionProxy
-    elif proxy_type == ProxyType.dictionary:
-        class DictionaryProxy(dict):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                if args is not None:
-                    dict.__init__(self, args)
-                else:
-                    dict.__init__(self)
-            def __getattribute__(self, name):
-                return conn.getattr(self, name)
-        ProxyClass = DictionaryProxy
-    elif proxy_type == ProxyType.list:
-        class ListProxy(list):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                list.__init__(self, args)
-            def __getattribute__(self, name):
-                return conn.getattr(self, name)
-        ProxyClass = ListProxy
-    elif proxy_type == ProxyType.set:
-        class SetProxy(set):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                set.__init__(self, args)
-            def __getattribute__(self, name):
-                return conn.getattr(self, name)
-        ProxyClass = SetProxy
-    elif proxy_type == ProxyType.module:
-        class ModuleProxy(types.ModuleType):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                types.ModuleType.__init__(self, "")
-                self.__importer = None
-            def __getattribute__(self, name):
-                try:
-                    return conn.getattr(self, name)
-                except AttributeError:
-                    if self.__importer:
-                        return self.__importer(self.__name__ + "." + name)
-                    else:
-                        raise
-        ProxyClass = ModuleProxy
-    elif proxy_type == ProxyType.oldstyleclass:
-        class ClassObjectProxy:
-            def __init__(self):
-                on_proxy_init(self, id_)
-            def __call__(self, *args, **kwargs):
-                message_type = pushy.protocol.message.MessageType.op__call__
-                return conn.operator(message_type, self, args, kwargs)
-            def __getattr__(self, name):
-                print "~" + name
-                if name == "__call__":
-                    raise AttributeError, "__call__"
-                return conn.getattr(self, name)
-        ProxyClass = ClassObjectProxy
-    else:
-        class ObjectProxy(object):
-            def __init__(self):
-                on_proxy_init(self, id_)
-                object.__init__(self)
-            def __getattribute__(self, name):
-                return conn.getattr(self, name)
-        ProxyClass = ObjectProxy
+    proxy_type = proxy_types[proxy_type]
+    ProxyClass = class_factories[proxy_type](args, conn, on_proxy_init)
 
     # Store the operator mask and proxy type in the class. This will be used by
     # ProxyType.getoperators() and ProxyType.get()
@@ -191,18 +233,10 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
             (conn.operator(type_, self, args, kwargs))
 
     # Create proxy operators.
-    operators = []
-    op_index = -1
-    while opmask:
-        if opmask & 1:
-            type_ = message_types[op_index]
-            method = bound_operator(type_)
-            setattr(ProxyClass, type_.name[2:], method)
-        opmask >>= 1
-        op_index -= 1
+    types = (t for t in message_types if (opmask & (1 << t.code)))
+    map(lambda t: setattr(ProxyClass, t.name[2:], bound_operator(t)), types)
 
     # Add other standard methods.
-    setattr(ProxyClass, "__del__", lambda self: conn.delete(self))
     setattr(ProxyClass, "__str__", lambda self: conn.getstr(self))
     setattr(ProxyClass, "__repr__", lambda self: conn.getrepr(self))
     setattr(ProxyClass, "__setattr__", lambda *args: conn.setattr(*args))
@@ -212,35 +246,4 @@ def Proxy(id_, opmask, proxy_type, args, conn, on_proxy_init):
     setattr(ProxyClass, "next", lambda self: conn.getattr(self, "next")())
 
     return ProxyClass()
-
-
-###############################################################################
-# A class for storing a proxy object along with its operator mask and proxy-
-# type.
-###############################################################################
-
-class ProxyObject(object):
-    def __init__(self, proxy, operator_mask, proxy_type):
-        self.proxy = proxy
-        self.operator_mask = operator_mask
-        self.proxy_type = proxy_type
-
-###############################################################################
-# Create enumeration of proxy types
-###############################################################################
-
-proxy_names = (
-  "oldstyleclass",
-  "object",
-  "exception",
-  "dictionary",
-  "list",
-  "set",
-  "module"
-)
-proxy_types = []
-for i,t in enumerate(proxy_names):
-    p = ProxyType(i, t)
-    proxy_types.append(p)
-    setattr(ProxyType, t, p)
 
