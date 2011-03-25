@@ -215,7 +215,6 @@ def Proxy(opmask, proxy_type, args, conn, on_proxy_init):
     """
 
     # Determine the class to use for the proxy type.
-    proxy_type = proxy_types[proxy_type]
     ProxyClass = class_factories[proxy_type](args, conn, on_proxy_init)
 
     # Store the operator mask and proxy type in the class. This will be used by

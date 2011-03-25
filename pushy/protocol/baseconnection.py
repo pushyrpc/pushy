@@ -46,6 +46,13 @@ response_types = (
 marshallable_types = tuple(marshallable_types)
 
 
+# Marshalling constants.
+MARSHAL_TUPLE  = 0
+MARSHAL_ORIGIN = 1
+MARSHAL_NEW    = 2
+MARSHAL_REF    = 3
+
+
 class LoggingFile:
     def __init__(self, stream, log):
         self.stream = stream
@@ -134,7 +141,7 @@ class BaseConnection(object):
                     open("%d-%d.out" % (os.getpid(), self.__connid),"wb"))
 
         # (Client) Contains mapping of id(obj) -> proxy
-        self.__proxies = weakref.WeakValueDictionary()
+        self.__proxies = {} #weakref.WeakValueDictionary()
         # (Client) Contains mapping of id(obj) -> threading.Event, which
         # __unmarshal will use to synchronise the order of messages.
         self.__pending_proxies = {}
@@ -406,29 +413,20 @@ Proxied Object Count: %r
 
     def __marshal(self, obj):
         # XXX perhaps we can check refcount to optimise (if 1, immutable)
-        try:
-            if type(obj) in marshallable_types:
-                return "s" + marshal.dumps(obj, 0)
-        except ValueError:
-            pass
+        if type(obj) in marshallable_types:
+            return obj
 
         # If it's a tuple, try to marshal each item individually.
         if type(obj) is tuple:
-            payload = "t"
-            try:
-                for item in obj:
-                    part = self.__marshal(item)
-                    payload += struct.pack(">I", len(part))
-                    payload += part
-                return payload
-            except ValueError: pass
+            return (MARSHAL_TUPLE, tuple(map(self.__marshal, obj)))
 
         i = id(obj)
         if i in self.__proxied_objects:
-            return "p" + self.__marshal(i)
+            # The object has previously been proxied.
+            return (MARSHAL_REF, i)
         elif i in self.__proxy_ids:
             # Object originates at the peer.
-            return "o" + marshal.dumps(self.__proxy_ids[i])
+            return (MARSHAL_ORIGIN, self.__proxy_ids[i])
         else:
             # Create new entry in proxy objects map:
             #    id -> (obj, refcount, opmask, args)
@@ -438,79 +436,66 @@ Proxied Object Count: %r
             opmask = ProxyType.getoperators(obj)
             proxy_type = ProxyType.get(obj)
             args = ProxyType.getargs(proxy_type, obj)
-
             pushy.util.logger.debug(
-                "Marshalling object: %r, %r, %r",
-                i, opmask, proxy_type)
+                "Marshalling object: %r, %r", i, proxy_type)
 
             self.__proxied_objects[i] = obj
-            return "p" + self.__marshal((i, opmask, int(proxy_type), args))
+            marshalled_args = self.__marshal(args)
+            return (MARSHAL_NEW, i, opmask, int(proxy_type), marshalled_args)
 
 
-    def __unmarshal(self, payload):
-        if payload[0] == "s":
-            # Simple type
-            return marshal.loads(buffer(payload, 1))
-        elif payload[0] == "t":
-            size_size = struct.calcsize(">I")
-            payload = buffer(payload, 1)
-            parts = []
-            while len(payload) > 0:
-                size = struct.unpack(">I", buffer(payload, 0, size_size))[0]
-                payload = buffer(payload, size_size)
-                parts.append(self.__unmarshal(buffer(payload, 0, size)))
-                payload = buffer(payload, size)
-            return tuple(parts)
-        elif payload[0] == "p":
-            # Proxy object
-            id_ = self.__unmarshal(buffer(payload, 1))
-            if type(id_) is tuple:
+    def __unmarshal(self, obj):
+        pushy.util.logger.debug("unmarshal(%r)", obj)
+
+        if type(obj) is tuple:
+            if obj[0] is MARSHAL_TUPLE:
+                return tuple(map(self.__unmarshal, obj[1]))
+            elif obj[0] is MARSHAL_ORIGIN:
+                return self.__proxied_objects[obj[1]]
+            elif obj[0] is MARSHAL_NEW:
+                oid = obj[1]
+                opmask = obj[2]
+                proxy_type = proxy_types[obj[3]]
+                args = self.__unmarshal(obj[4])
                 pushy.util.logger.debug(
-                    "Unmarshalling object: %r, %r, %r",
-                    id_[0], id_[1], proxy_types[id_[2]])
+                    "Unmarshalling object: %r, %r", oid, proxy_type)
 
                 # New object: (id, opmask, object_type, args)
-                id_, opmask, object_type, args = id_
                 register_proxy = \
-                    lambda proxy: self.__register_proxy(proxy, id_)
-                p = Proxy(opmask, object_type, args, self, register_proxy)
+                    lambda proxy: self.__register_proxy(proxy, oid)
+                p = Proxy(opmask, proxy_type, args, self, register_proxy)
 
                 # Wake anyone waiting on this ID to be unmarshalled.
                 self.__unmarshal_lock.acquire()
                 try:
-                    if id_ in self.__pending_proxies:
-                        event = self.__pending_proxies[id_]
-                        del self.__pending_proxies[id_]
+                    if oid in self.__pending_proxies:
+                        event = self.__pending_proxies[oid]
+                        del self.__pending_proxies[oid]
                         event.set()
                 finally:
                     self.__unmarshal_lock.release()
-
                 return p
-            else:
-                # Known object: id
-                if id_ not in self.__proxies:
+            elif obj[0] is MARSHAL_REF:
+                oid = obj[1]
+                if oid not in self.__proxies:
                     self.__unmarshal_lock.acquire()
                     try:
-                        if id_ not in self.__proxies:
-                            event = self.__pending_proxies.get(id_, None)
+                        if oid not in self.__proxies:
+                            event = self.__pending_proxies.get(oid, None)
                             if event is None:
                                 event = threading.Event()
-                                self.__pending_proxies[id_] = event
+                                self.__pending_proxies[oid] = event
                     finally:
                         self.__unmarshal_lock.release()
-
                     # Wait for the event to be set.
-                    if id_ not in self.__proxies:
+                    if oid not in self.__proxies:
                         event.wait()
-
-                return self.__proxies[id_]
-        elif payload[0] == "o":
-            # The object originated here.
-            id_ = marshal.loads(buffer(payload, 1))
-            object = self.__proxied_objects[id_]
-            return object
+                return self.__proxies[oid]
+            else:
+                raise ValueError, "Invalid type: %r" % obj[0]
         else:
-            raise ValueError, "Invalid payload prefix: %s", payload[0]
+            # Simple type.
+            return obj
 
 
     def __register_proxy(self, proxy, remote_id):
@@ -522,7 +507,9 @@ Proxied Object Count: %r
 
     def __send_message(self, message_type, args):
         thread_id = self.__peer_thread
-        m = Message(message_type, self.__marshal(args), thread_id)
+        marshalled = self.__marshal(args)
+        payload = marshal.dumps(marshalled, 0)
+        m = Message(message_type, payload, thread_id)
         bytes = m.pack()
         pushy.util.logger.debug("[%r] Sending %r (%r): %r",
                                 self.__connid, m, thread_id, bytes)
@@ -561,7 +548,7 @@ Proxied Object Count: %r
 
         try:
             try:
-                args = self.__unmarshal(m.payload)
+                args = self.__unmarshal(marshal.loads(m.payload))
                 result = self.message_handlers[m.type](m.type, args)
                 if m.type not in response_types:
                     self.__send_response(result)
