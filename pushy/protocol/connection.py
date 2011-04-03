@@ -52,8 +52,15 @@ class Connection(BaseConnection):
         return self.send_request(MessageType.evaluate, args)
 
     def operator(self, type_, object, args, kwargs):
-        return self.send_request(
-                   type_, (object, tuple(args), tuple(kwargs.items())))
+        if args is not None:
+            args = tuple(args)
+            if not args:
+                args = None
+        if kwargs is not None:
+            kwargs = tuple(kwargs.items())
+            if not kwargs:
+                kwargs = None
+        return self.send_request(type_, (object, args, kwargs))
 
     def getattr(self, object, name):
         return self.send_request(MessageType.getattr, (object, name))

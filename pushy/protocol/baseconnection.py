@@ -445,8 +445,6 @@ Proxied Object Count: %r
 
 
     def __unmarshal(self, obj):
-        pushy.util.logger.debug("unmarshal(%r)", obj)
-
         if type(obj) is tuple:
             if obj[0] is MARSHAL_TUPLE:
                 return tuple(map(self.__unmarshal, obj[1]))
@@ -511,15 +509,13 @@ Proxied Object Count: %r
         payload = marshal.dumps(marshalled, 0)
         m = Message(message_type, payload, thread_id)
         bytes = m.pack()
-        pushy.util.logger.debug("[%r] Sending %r (%r): %r",
-                                self.__connid, m, thread_id, bytes)
+        pushy.util.logger.debug("Sending %r -> %r", m, thread_id)
         self.__ostream_lock.acquire()
         try:
             self.__ostream.write(bytes)
             self.__ostream.flush()
         finally:
             self.__ostream_lock.release()
-        pushy.util.logger.debug("Sent %r [%d bytes]", message_type, len(bytes))
 
 
     def __recv(self):

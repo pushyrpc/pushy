@@ -24,6 +24,7 @@
 import logging, os, sys
 logger = logging.getLogger("pushy")
 logger.disabled = True
+logger.setLevel(logging.WARNING)
 if not logger.disabled:
     class ShutdownSafeFileHandler(logging.FileHandler):
         """
