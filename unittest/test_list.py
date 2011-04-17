@@ -41,6 +41,11 @@ class TestList(unittest.TestCase):
         self.conn.modules.sys.path.pop()
         self.assertNotEqual("!", self.conn.modules.sys.path[-1])
 
+    def test_compare(self):
+        a = self.conn.eval("[1]")
+        b = self.conn.eval("[1]")
+        self.assertEqual(a, a)
+
 if __name__ == "__main__":
     #import logging, pushy.util
     #pushy.util.logger.addHandler(logging.StreamHandler())

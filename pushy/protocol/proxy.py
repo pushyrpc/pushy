@@ -21,7 +21,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-from pushy.protocol.message import message_types
+from pushy.protocol.message import message_types, MessageType
 import pushy.util
 import exceptions, types
 
@@ -73,13 +73,6 @@ class ProxyType(object):
             module_ = obj.__class__.__module__
             if module_ == "exceptions":
                 return obj.__class__.__name__
-        elif proxy_type is ProxyType.dictionary:
-            args = None
-            if len(obj) > 0:
-                args = tuple(obj.items())
-            return args
-        elif proxy_type in (ProxyType.list, ProxyType.set):
-            return tuple(obj)
         return None
 
     @staticmethod
@@ -152,14 +145,29 @@ def create_exception(args, conn, on_proxy_init):
 
 
 def create_dictionary(args, conn, on_proxy_init):
+    overridden_methods = frozenset(("items", "keys", "update"))
     class DictionaryProxy(dict):
         def __init__(self):
             on_proxy_init(self)
-            if args is not None:
-                dict.__init__(self, args)
+        def keys(self):
+            return list(conn.eval("lambda d: tuple(d.keys())")(self))
+        def items(self):
+            return list(conn.eval("lambda d: tuple(d.items())")(self))
+        def update(self, rhs):
+            if type(rhs) is dict:
+                conn.getattr(self, "update")(tuple(rhs.items()))
+            elif isinstance(rhs, dict):
+                conn.getattr(self, "update")(rhs)
             else:
-                dict.__init__(self)
+                conn.getattr(self, "update")(tuple(map(tuple, rhs)))
+        def values(self):
+            return list(conn.eval("lambda d: tuple(d.values())")(self))
+        def __eq__(self, rhs):
+            if self is rhs: return True
+            return self.items() == rhs.items()
         def __getattribute__(self, name):
+            if name in overridden_methods:
+                return object.__getattribute__(self, name)
             return conn.getattr(self, name)
     return DictionaryProxy
 
@@ -168,7 +176,12 @@ def create_list(args, conn, on_proxy_init):
     class ListProxy(list):
         def __init__(self):
             on_proxy_init(self)
-            list.__init__(self, args)
+            list.__init__(self)
+        def __eq__(self, rhs):
+            if self is rhs: return True
+            as_tuple = conn.eval("tuple")(self)
+            rhs_tuple = tuple(rhs)
+            return as_tuple == rhs_tuple
         def __getattribute__(self, name):
             return conn.getattr(self, name)
     return ListProxy
@@ -192,10 +205,17 @@ def create_module(args, conn, on_proxy_init):
             self.__importer = None
         def __getattribute__(self, name):
             try:
-                return conn.getattr(self, name)
+                # __dict__ on a module is expected to return a dict, not a
+                # descendant thereof. Its items will be (in CPython) obtained
+                # by ferretting around in the object's internals, rather than
+                # going through the usual Python interface.
+                result = conn.getattr(self, name)
+                if isinstance(result, dict) and name == "__dict__":
+                    return dict(result.items())
+                return result
             except AttributeError:
                 if self.__importer:
-                    return self.__importer(self.__name__ + "." + name)
+                    return self.__importer("%s.%s" % (self.__name__, name))
                 else:
                     raise
     return ModuleProxy
@@ -234,9 +254,18 @@ def Proxy(opmask, proxy_type, args, conn, on_proxy_init):
         return lambda self, *args, **kwargs: \
             (conn.operator(type_, self, args, kwargs))
 
+    # Operators should be defined if and only if they're not implemented in the
+    # local ProxyClass.
+    def should_setattr(t):
+        if not opmask & (1 << t.code):
+            return False
+        a = getattr(ProxyClass, t.name[2:], None)
+        return a is None or not \
+            (type(a) is types.MethodType and a.im_class is ProxyClass)
+
     # Create proxy operators.
-    types = (t for t in message_types if (opmask & (1 << t.code)))
-    map(lambda t: setattr(ProxyClass, t.name[2:], bound_operator(t)), types)
+    types_ = (t for t in message_types if should_setattr(t))
+    map(lambda t: setattr(ProxyClass, t.name[2:], bound_operator(t)), types_)
 
     # Add other standard methods.
     setattr(ProxyClass, "__str__", lambda self: conn.getstr(self))

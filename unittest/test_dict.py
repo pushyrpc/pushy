@@ -46,7 +46,7 @@ class TestDict(unittest.TestCase):
         dict_type = self.conn.modules.types.DictType
         d = dict_type(x="y")
         self.assertEqual("y", d["x"])
-        self.assertEqual(dict(x="y"), d)
+        self.assertEqual(d, dict(x="y"))
 
     def test_update(self):
         """
@@ -56,7 +56,7 @@ class TestDict(unittest.TestCase):
         dict_type = self.conn.modules.types.DictType
         d = dict_type(x="y")
         d.update({"y":"z"})
-        self.assertEqual({"x": "y", "y": "z"}, d)
+        self.assertEqual(d, {"x": "y", "y": "z"})
 
         d2 = dict_type(a="b")
         d.update(d2)
@@ -74,7 +74,7 @@ class TestDict(unittest.TestCase):
         self.assertTrue(isinstance(remote_list, list))
         local_dict = {"x": "y"}
         remote_list.append(local_dict)
-        self.assertEqual([local_dict], remote_list)
+        self.assertEqual(remote_list, [local_dict])
         #del local_dict["x"]
         #self.assertEqual([{}], remote_list)
 
@@ -89,7 +89,7 @@ class TestDict(unittest.TestCase):
 
         dict_type = self.conn.modules.types.DictType
         key, value = custom_object(), custom_object()
-        d = dict_type({key: value})
+        d = dict_type(((key, value),))
         d.keys()[0].x = 1
         d[key].y = 2
         self.assertEqual(1, key.x)
