@@ -21,7 +21,15 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, marshal, os, struct, sys, thread, threading, weakref
+import logging
+import marshal
+import os
+import struct
+import sys
+import thread
+import threading
+import weakref
+
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, proxy_types
 import pushy.util
@@ -73,9 +81,9 @@ class LoggingFile:
 
 class ResponseHandler:
     def __init__(self, condition):
-        self.condition   = condition
-        self.message     = None
-        self.thread      = thread.get_ident()
+        self.condition = condition
+        self.message   = None
+        self.thread    = thread.get_ident()
 
 
 connection_count_lock = threading.Lock()
