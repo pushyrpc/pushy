@@ -45,6 +45,7 @@ class Popen(pushy.transport.BaseTransport):
     def __init__(self, command, address, port=DEFAULT_PORT, **kwargs):
         pushy.transport.BaseTransport.__init__(self, address, daemon=True)
         self.__socket = socket.socket()
+        self.__socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.__socket.connect((address, port))
         self.stdin  = WrappedSocketFile(self.__socket.makefile("wb"),
                                         self.__socket, socket.SHUT_WR)
