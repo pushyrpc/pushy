@@ -26,8 +26,20 @@ This module provides the code to used to start a remote Pushy server running,
 and initiate a connection.
 """
 
-import __builtin__, imp, inspect, marshal, os, sys, marshal, os, struct
-import threading, cPickle as pickle
+import __builtin__
+import imp
+import inspect
+import marshal
+import os
+import struct
+import sys
+import threading
+
+# Favour cPickle over pickle.
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 # Import zipimport, for use in PushyPackageLoader.
 try:
@@ -201,7 +213,7 @@ def try_set_binary(fd):
     except ImportError: pass
 
 def pushy_server(stdin, stdout):
-    import pickle, sys
+    import sys
 
     # Reconstitute the package hierarchy delivered from the client
     (packages, modules) = pickle.load(stdin)
@@ -425,6 +437,20 @@ class PushyClient(object):
             self.remote = None
             self.serve_thread = None
             raise
+
+
+    def __get_gc_enabled(self):
+        return self.remote.gc_enabled
+    def __set_gc_enabled(self, enabled):
+        self.remote.gc_enabled = enabled
+    gc_enabled = property(__get_gc_enabled, __set_gc_enabled)
+
+
+    def __get_gc_interval(self):
+        return self.remote.gc_interval
+    def __set_gc_interval(self, interval):
+        self.remote.gc_interval = interval
+    gc_interval = property(__get_gc_interval, __set_gc_interval)
 
 
     def __putfile(self, local, remote):
