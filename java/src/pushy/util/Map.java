@@ -61,7 +61,6 @@ public class Map extends AbstractMap implements Iterable {
     }
 
     public boolean containsValue(Object value) {
-        
         Boolean res = (Boolean)contains.__call__(new Object[]{value});
         return res.booleanValue();
     }
@@ -77,7 +76,15 @@ public class Map extends AbstractMap implements Iterable {
     }
 
     public void putAll(java.util.Map map) {
-        update.__call__(new Object[]{map});
+        if (map != null) {
+            Object[] items = new Object[map.size()];
+            int i = 0;
+            for (Iterator iter = map.entrySet().iterator(); iter.hasNext();) {
+                Map.Entry entry = (Map.Entry)iter.next();
+                items[i++] = new Object[]{entry.getKey(), entry.getValue()};
+            }
+            update.__call__(new Object[]{items});
+        }
     }
 
     public int size() {

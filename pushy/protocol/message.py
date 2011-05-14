@@ -114,6 +114,7 @@ message_names = (
   "getstr",
   "getrepr",
   "delete",
+  "as_tuple",
 
   # All object ops go at the end
   "op__call__",

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -33,6 +33,8 @@ public class ExportedObject implements PushyObject
     private Object object;
     private Connection connection;
     private Proxy.Type type;
+    private int version;
+    private Object marshallable;
 
     public ExportedObject(Number id, Proxy.Type type,
                           Object object, Connection connection)
@@ -42,6 +44,8 @@ public class ExportedObject implements PushyObject
         this.type = type;
         this.object = object;
         this.connection = connection;
+        this.version = 0;
+        this.marshallable = null;
     }
 
     public Number getId()
@@ -62,6 +66,26 @@ public class ExportedObject implements PushyObject
     public Connection getConnection()
     {
         return connection;
+    }
+
+    public int getVersion()
+    {
+        return version;
+    }
+
+    public synchronized int incrementVersion()
+    {
+        return ++version;
+    }
+
+    public void setMarshallableRepresentation(Object marshallable)
+    {
+        this.marshallable = marshallable;
+    }
+
+    public Object getMarshallableRepresentation()
+    {
+        return marshallable;
     }
 
     public String toString()

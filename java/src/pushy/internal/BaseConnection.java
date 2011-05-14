@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -51,6 +51,10 @@ public abstract class BaseConnection
     private static final Logger logger =
         Logger.getLogger(BaseConnection.class.getName());
 
+    private static final Integer MARSHAL_TUPLE = new Integer(0);
+    private static final Integer MARSHAL_ORIGIN = new Integer(1);
+    private static final Integer MARSHAL_PROXY = new Integer(2);
+
     private java.io.InputStream istream;
     private java.io.OutputStream ostream;
     private Object processingCondition = new Object();
@@ -61,10 +65,9 @@ public abstract class BaseConnection
     private int responseCount = 0;
     private Map responseHandlers = new HashMap();
     private List requests = new ArrayList();
-    private Map proxiedObjects = new IdentityHashMap();
-    private Map proxiedObjectIds = new HashMap();
+    private Map proxiedObjects = new HashMap();
     private Map proxies = new HashMap();
-    private Map proxyIds = new IdentityHashMap();
+    //private Map proxyIds = new IdentityHashMap();
     private ThreadLocal threadRequestCount = new ThreadLocal();
     private ThreadLocal peerThread = new ThreadLocal();
 
@@ -496,57 +499,43 @@ public abstract class BaseConnection
 
     private byte[] marshal(Object value) throws IOException
     {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        marshal(value, stream);
-        return stream.toByteArray();
+        return Marshal.dump(makeMarshallable(value));
     }
 
-    private void marshal(Object value, OutputStream stream) throws IOException
+    private Object makeMarshallable(Object value) throws IOException
     {
+        boolean isArray = value==null ? false : value.getClass().isArray();
+
         // Simple type?
-        if (Marshal.isMarshallable(value))
-        {
-            stream.write('s');
-            Marshal.dump(value, stream);
-            return;
-        }
+        if (!isArray && Marshal.isMarshallable(value))
+            return value;
 
         if (!(value instanceof PushyObject))
             logger.log(Level.FINEST, "Marshalling object: {0}", value);
 
         // Marshal array in the same way as Python tuples.
-        if (value.getClass().isArray())
+        if (isArray)
         {
             int length = Array.getLength(value);
-            stream.write('t');
-            if (length > 0)
-            {
-                ByteArrayOutputStream partStream =
-                    new ByteArrayOutputStream();
-                for (int i = 0; i < length; ++i, partStream.reset())
-                {
-                    marshal(Array.get(value, i), partStream);
-                    putInt32(partStream.size(), stream);
-                    partStream.writeTo(stream);
-                }
-            }
-            return;
+            Object[] elements = new Object[length];
+            for (int i = 0; i < length; ++i)
+                elements[i] = makeMarshallable(Array.get(value, i));
+            return new Object[]{MARSHAL_TUPLE, elements};
         }
 
         // If it's a proxy object and it belongs to this connection, then
         // shortcut the proxy ID lookup.
-        if (value instanceof PushyObjectImpl)
+        if (value instanceof ProxyObject)
         {
-            PushyObjectImpl proxy = (PushyObjectImpl)value;
+            ProxyObject proxy = (ProxyObject)value;
             if (proxy.getConnection() == this)
-            {
-                stream.write('o');
-                Marshal.dump(proxy.getId(), stream);
-                return;
-            }
+                return new Object[]{MARSHAL_ORIGIN, proxy.getId()};
         }
+
         // If the object exists in the proxies map, then return the
         // identifier to the originator of the object.
+/*
+        XXX this isn't neccesary is it? due to the above short-circuit?
         synchronized (proxies)
         {
             Number id = (Number)proxyIds.get(value);
@@ -557,6 +546,7 @@ public abstract class BaseConnection
                 return;
             }
         }
+*/
 
         // If it's a previously proxied object and belongs to this connection,
         // then shortcut the export step.
@@ -565,130 +555,109 @@ public abstract class BaseConnection
             ExportedObject eo = (ExportedObject)value;
             if (eo.getConnection() == this)
             {
-                stream.write('p');
-                marshal(((ExportedObject)value).getId(), stream);
-                return;
+                // Increment the version, and remarshal.
+                return new Object[]{MARSHAL_PROXY,
+                                    eo.getMarshallableRepresentation(),
+                                    new Integer(eo.incrementVersion())};
             }
         }
-        // If the object exists in the proxiedObjects map, then send the
-        // previously generated identifier to the peer.
+
         synchronized (proxiedObjects)
         {
-            ExportedObject eo = (ExportedObject)proxiedObjects.get(value);
-            if (eo != null && eo.getConnection() == this)
-            {
-                stream.write('p');
-                marshal(eo.getId(), stream);
-                return;
-            }
+            // XXX this only works at the moment because we don't
+            //     discard objects from the proxied objects map.
+            Number id = new Integer(proxiedObjects.size());
+            Proxy.Type type = Proxy.getType(value);
+            Number operators = Proxy.getOperators(value);
+            Object proxyArg = Proxy.getArgument(value, type);
+            Integer typeCode = new Integer(type.getCode());
+
+            // Create the "exported object"
+            ExportedObject eo = createExportObject(id, type, value);
+            proxiedObjects.put(id, eo);
+
+            // Create the marshallable result, and record it on the object.
+            Object[] marshallable;
+            if (proxyArg == null)
+                marshallable = new Object[]{id, operators, typeCode};
             else
-            {
-                // XXX this only works at the moment because we don't
-                //     discard objects from the proxied objects map.
-                Number id = new Integer(proxiedObjects.size());
-                Proxy.Type type = Proxy.getType(value);
-                Number operators = Proxy.getOperators(value);
-                Object proxyArg = Proxy.getArgument(value, type);
-                Integer typeCode = new Integer(type.getCode());
-
-                eo = createExportObject(id, type, value);
-                proxiedObjects.put(value, eo);
-                proxiedObjectIds.put(id, eo);
-
-                Object[] args = new Object[]{id, operators, typeCode, proxyArg};
-                stream.write('p');
-                marshal(args, stream);
-                return;
-            }
+                marshallable = new Object[]{id, operators, typeCode, proxyArg};
+            eo.setMarshallableRepresentation(marshallable);
+            return new Object[]{MARSHAL_PROXY, marshallable, new Integer(0)};
         }
     }
 
     private Object unmarshal(byte[] bytes) throws IOException
     {
-        InputStream stream = new ByteArrayInputStream(bytes);
-        return unmarshal(stream);
+        return reconstruct(Marshal.load(bytes));
     }
 
     /**
-     * Unmarshal an object from its network representation.
+     * Reconstruct an unmarshalled object that was created by makeMarshallable.
      */
-    private Object unmarshal(InputStream stream) throws IOException
+    private Object reconstruct(Object marshallable) throws IOException
     {
-        int type = stream.read();
-        switch (type)
+        if (marshallable == null || !marshallable.getClass().isArray())
+            return marshallable;
+
+        Number type = (Number)Array.get(marshallable, 0);
+        if (type.equals(MARSHAL_TUPLE))
         {
-            case 's': // Simple marshallable type
+            Object values = Array.get(marshallable, 1);
+            int length = Array.getLength(values);
+            List items = new ArrayList(length);
+            for (int i = 0; i < length; ++i)
+                items.add(reconstruct(Array.get(values, i)));
+            return Marshal.createArray(items);
+        }
+        else if (type.equals(MARSHAL_ORIGIN))
+        {
+            Object id = Array.get(marshallable, 1);
+            synchronized (proxiedObjects)
             {
-                return Marshal.load(stream);
+                return (ExportedObject)proxiedObjects.get(id);
             }
-            case 't': // Tuple
-            {
-                List items = new ArrayList();
-                while (stream.available() > 0)
-                {
-                    int size = getInt32(stream);
-                    byte[] bytes = readBytes(stream, size);
-                    items.add(unmarshal(bytes));
-                }
-                return Marshal.createArray(items);
-            }
-            case 'o': // Proxy object that originated here.
-            {
-                Integer id = (Integer)Marshal.load(stream);
-                synchronized (proxiedObjects)
-                {
-                    ExportedObject eo =
-                        (ExportedObject)proxiedObjectIds.get(id);
-                    return eo;
-                }
-            }
-            case 'p': // Remote proxy object.
-            {
-                Object value = unmarshal(stream);
-                if (value.getClass().isArray())
-                {
-                    // Split apart the id.
-                    Object arg = null;
-                    Number id = (Number)Array.get(value, 0);
-                    Number opmask = (Number)Array.get(value, 1);
-                    Integer objectType = (Integer)Array.get(value, 2);
-                    if (Array.getLength(value) > 3)
-                        arg = Array.get(value, 3);
+        }
+        else if (type.equals(MARSHAL_PROXY))
+        {
+            Object description = Array.get(marshallable, 1);
+            Number version = (Number)Array.get(marshallable, 2);
 
-                    // Create the proxy object.
-                    Object proxy = createProxy(id, opmask, objectType, arg);
-
-                    // Add the proxy and wake up anyone waiting for it to be
-                    // registered.
-                    synchronized (proxies)
-                    {
-                        proxies.put(id, proxy);
-                        proxyIds.put(proxy, id);
-                        proxies.notifyAll();
-                    }
+            // Get the object ID and check if we have received it before.
+            Number id = (Number)Array.get(description, 0);
+            synchronized (proxies)
+            {
+                ProxyObject proxy = (ProxyObject)proxies.get(id);
+                if (proxy != null)
+                {
+                    proxy.setVersion(version.intValue());
                     return proxy;
                 }
-                else
-                {
-                    Number id = (Number)value;
-                    synchronized (proxies)
-                    {
-                        Object proxy = proxies.get(id);
-                        while (proxy == null)
-                        {
-                            try {
-                                wait();
-                            } catch (InterruptedException e) {}
-                            proxy = proxies.get(id);
-                        }
-                        return proxy;
-                    }
-                }
             }
-            default:
-                logger.severe("Unhandled type: " + (char)type);
+
+            // Split apart the rest of the description.
+            Object arg = null;
+            Number opmask = (Number)Array.get(description, 1);
+            Integer objectType = (Integer)Array.get(description, 2);
+            if (Array.getLength(description) > 3)
+                arg = Array.get(description, 3);
+
+            // Create the proxy object.
+            ProxyObject proxy = createProxy(id, opmask, objectType, arg);
+            proxy.setVersion(version.intValue());
+
+            // Add the proxy.
+            synchronized (proxies)
+            {
+                proxies.put(id, proxy);
+            }
+            return proxy;
         }
-        return null;
+        else
+        {
+            logger.severe("Unhandled type: " + type);
+            return null;
+        }
     }
 
     /**
@@ -696,7 +665,7 @@ public abstract class BaseConnection
      * operators the remote object contains, and optionally some arguments for
      * the object's constructor.
      */
-    protected abstract Object
+    protected abstract ProxyObject
     createProxy(Number id, Number opmask, Integer type, Object args);
 
     /**

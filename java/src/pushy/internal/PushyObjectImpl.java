@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -27,25 +27,37 @@ package pushy.internal;
 
 import pushy.PushyObject;
 
-public class PushyObjectImpl implements PushyObject
+public class PushyObjectImpl implements PushyObject, ProxyObject
 {
     private Number id;
     private Connection connection;
+    private int version;
 
     PushyObjectImpl(Number id, Connection connection)
     {
         this.id = id;
         this.connection = connection;
+        this.version = 0;
     }
 
-    public Number getId()
+    public Object getId()
     {
         return this.id;
     }
 
-    public Connection getConnection()
+    public BaseConnection getConnection()
     {
         return connection;
+    }
+
+    public int getVersion()
+    {
+        return version;
+    }
+
+    public void setVersion(int version)
+    {
+        this.version = version;
     }
 
     public boolean __hasattr__(String key)

@@ -118,6 +118,7 @@ class pushy_server(asyncore.dispatcher):
     def handle_accept(self):
         (sock,addr) = self.accept()
         sock.setblocking(1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         stdin = sock.makefile("rb")
         stdout = sock.makefile("wb")
         threading.Thread(target=serve_forever, args=(stdin,stdout)).start()

@@ -39,6 +39,7 @@ class Connection(BaseConnection):
             MessageType.setattr:     self.__handle_setattr,
             MessageType.getstr:      self.__handle_getstr,
             MessageType.getrepr:     self.__handle_getrepr,
+            MessageType.as_tuple:    self.__handle_as_tuple,
             MessageType.op__call__:  self.__handle_call,
         })
         for message_type in message_types:
@@ -47,9 +48,11 @@ class Connection(BaseConnection):
             if message_type.name.startswith("op__"):
                 self.message_handlers[message_type] = self.__handle_operator
 
+
     def eval(self, expression, globals=None, locals=None):
         args = (expression, globals, locals)
         return self.send_request(MessageType.evaluate, args)
+
 
     def operator(self, type_, object, args, kwargs):
         if args is not None:
@@ -62,35 +65,45 @@ class Connection(BaseConnection):
                 kwargs = None
         return self.send_request(type_, (object, args, kwargs))
 
+
     def getattr(self, object, name):
         return self.send_request(MessageType.getattr, (object, name))
+
 
     def setattr(self, object, name, value):
         return self.send_request(MessageType.setattr, (object, name, value))
 
+
     def getstr(self, object):
         return self.send_request(MessageType.getstr, object)
 
+
     def getrepr(self, object):
         return self.send_request(MessageType.getrepr, object)
+
 
     def __handle_getattr(self, type, args):
         (object, name) = args
         return getattr(object, name)
 
+
     def __handle_setattr(self, type, args):
         (object, name, value) = args
         return setattr(object, name, value)
 
+
     def __handle_getstr(self, type, object):
         return str(object)
+
 
     def __handle_getrepr(self, type, object):
         return repr(object)
 
+
     def __handle_evaluate(self, type_, args):
         (expression, globals, locals) = args
         return eval(expression, globals, locals)
+
 
     def __handle_call(self, type_, args_):
         (object, args, kwargs) = args_
@@ -108,6 +121,7 @@ class Connection(BaseConnection):
             kwargs = dict(kwargs)
         result = object(*args, **kwargs)
         return result
+
 
     def __handle_operator(self, type, args_):
         object = args_[0]
@@ -134,4 +148,9 @@ class Connection(BaseConnection):
         name = type.name[2:]
         method = getattr(object, name)
         return method(*args, **kwargs)
+
+
+    def __handle_as_tuple(self, type_, args):
+        (type_, args) = args
+        return tuple(self.message_handlers[type_](type_, args))
 

@@ -49,6 +49,27 @@ Application Programming Interface (API)
           5564
 
 
+    .. py:attribute:: gc_enabled
+
+       Boolean flag to specify whether proxies should be garbage collected or
+       not. Disabling garbage collection may improve the speed of Pushy, at the
+       cost of memory growth as new objects are proxied. Garbage collection is
+       enabled by default.
+
+
+    .. py:attribute:: gc_interval
+
+       Time in seconds between reconciliation of garbage collected objects.
+
+       If :py:attr:`gc_enabled` is set to True, then object proxies may be
+       garbage collected. When object proxies are garbage collected, their
+       remote counterpart must be also be deleted (reconciled). The garbage
+       collection process will enqueue deletions and, after gc_interval seconds
+       have elapsed since the previous remote-deletion, send a message to the
+       peer to delete the objects enqueued by the garbage collector. The
+       default garbage collection interval is five seconds.
+
+
     .. py:method:: close()
 
        Close the connection.

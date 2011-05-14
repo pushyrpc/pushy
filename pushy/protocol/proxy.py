@@ -145,14 +145,14 @@ def create_exception(args, conn, on_proxy_init):
 
 
 def create_dictionary(args, conn, on_proxy_init):
-    overridden_methods = frozenset(("items", "keys", "update"))
+    overridden_methods = frozenset(("items", "keys", "update", "values"))
     class DictionaryProxy(dict):
         def __init__(self):
             on_proxy_init(self)
         def keys(self):
-            return list(conn.eval("lambda d: tuple(d.keys())")(self))
+            return list(conn.as_tuple(conn.getattr(self, "keys")))
         def items(self):
-            return list(conn.eval("lambda d: tuple(d.items())")(self))
+            return list(conn.as_tuple(conn.getattr(self, "items")))
         def update(self, rhs):
             if type(rhs) is dict:
                 conn.getattr(self, "update")(tuple(rhs.items()))
@@ -161,7 +161,7 @@ def create_dictionary(args, conn, on_proxy_init):
             else:
                 conn.getattr(self, "update")(tuple(map(tuple, rhs)))
         def values(self):
-            return list(conn.eval("lambda d: tuple(d.values())")(self))
+            return list(conn.as_tuple(conn.getattr(self, "values")))
         def __eq__(self, rhs):
             if self is rhs: return True
             return self.items() == rhs.items()

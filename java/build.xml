@@ -1,6 +1,9 @@
 <?xml version="1.0"?>
 
-<project default="jar">
+<project name="pushy" default="jar">
+    <!-- Append system classpath to the end of the Ant classpath. -->
+    <property name="build.sysclasspath" value="last"/>
+
     <target name="clean">
         <delete dir="build"/>
     </target>
@@ -23,7 +26,7 @@
 
     <target name="compile">
         <mkdir dir="build/classes"/>
-        <javac srcdir="src" destdir="build/classes" source="1.4" target="1.4">
+        <javac srcdir="src" destdir="build/classes" source="1.4" target="1.4" debug="true">
             <compilerarg value="-Xlint"/>
         </javac>
     </target>
@@ -56,7 +59,7 @@
                 <attribute name="Bundle-ManifestVersion" value="2"/>
                 <attribute name="Bundle-Name" value="Pushy"/>
                 <attribute name="Bundle-SymbolicName" value="pushy"/>
-                <attribute name="Bundle-Version" value="0.4.${revno}"/>
+                <attribute name="Bundle-Version" value="0.5.${revno}"/>
                 <attribute name="Export-Package"
                            value="pushy, pushy.io, pushy.net, pushy.modules"/>
             </manifest>

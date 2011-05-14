@@ -37,7 +37,9 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -53,7 +55,7 @@ public class Connection extends BaseConnection
         super(istream, ostream);
     }
 
-    protected Object
+    protected ProxyObject
     createProxy(Number id, Number opmask, Integer type, Object args)
     {
         return Proxy.getProxy(id, opmask, type, args, this);
@@ -106,7 +108,21 @@ public class Connection extends BaseConnection
     {
         try
         {
-            return sendRequest(type, new Object[]{object, args, kwargs});
+            // Convert the keyword arguments to a tuple of items.
+            Object[] kwargs_items = null;
+            if (kwargs != null)
+            {
+                kwargs_items = new Object[kwargs.size()];
+                Iterator iter = kwargs.entrySet().iterator();
+                for (int i = 0; iter.hasNext(); ++i)
+                {
+                    Map.Entry entry = (Map.Entry)iter.next();
+                    kwargs_items[i] = new Object[]{entry.getKey(),
+                                                   entry.getValue()};
+                }
+            }
+
+            return sendRequest(type, new Object[]{object, args, kwargs_items});
         }
         catch (IOException e)
         {
@@ -214,6 +230,14 @@ public class Connection extends BaseConnection
         if (type.equals(Message.Type.evaluate))
             throw new UnsupportedOperationException("Evaluate is unsupported");
 
+        if (type.equals(Message.Type.as_tuple))
+        {
+            Object[] args = (Object[])arg;
+            type = Message.Type.getType(((Number)args[0]).intValue());
+            Object result = handle(type, args[1]);
+            return createArray(result);
+        }
+
         // __getattr__
         if (type.equals(Message.Type.getattr))
         {
@@ -260,6 +284,17 @@ public class Connection extends BaseConnection
         }
 
         throw new UnsupportedOperationException("Unsupported type: " + type);
+    }
+
+    // Convert an object to an array, to support the "as_tuple" message.
+    private static Object createArray(Object object)
+    {
+        if (object == null || object.getClass().isArray())
+            return null;
+        if (object instanceof Collection)
+            return ((Collection)object).toArray();
+        throw new IllegalArgumentException(
+            "Non collection type cannot be cast to an array");
     }
 }
 

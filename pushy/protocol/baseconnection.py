@@ -21,7 +21,16 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-import logging, marshal, os, struct, sys, thread, threading, weakref
+import logging
+import marshal
+import os
+import struct
+import sys
+import thread
+import threading
+import time
+import weakref
+
 from pushy.protocol.message import Message, MessageType, message_types
 from pushy.protocol.proxy import Proxy, ProxyType, proxy_types
 import pushy.util
@@ -71,11 +80,37 @@ class LoggingFile:
         return data
 
 
+class MessageStream:
+    def __init__(self, file_):
+        self.__lock = threading.Lock()
+        self.__file = file_
+    def close(self):
+        self.__lock.acquire()
+        try:
+            self.__file.close()
+        finally:
+            self.__lock.release()
+    def send_message(self, m):
+        bytes_ = m.pack()
+        self.__lock.acquire()
+        try:
+            self.__file.write(bytes_)
+            self.__file.flush()
+        finally:
+            self.__lock.release()
+    def receive_message(self):
+        self.__lock.acquire()
+        try:
+            return Message.unpack(self.__file)
+        finally:
+            self.__lock.release()
+
+
 class ResponseHandler:
     def __init__(self, condition):
-        self.condition   = condition
-        self.message     = None
-        self.thread      = thread.get_ident()
+        self.condition = condition
+        self.message   = None
+        self.thread    = thread.get_ident()
 
 
 connection_count_lock = threading.Lock()
@@ -93,24 +128,25 @@ def get_connection_id():
 
 class BaseConnection(object):
     def __init__(self, istream, ostream, initiator=True):
-        self.__open           = True
-        self.__istream        = istream
-        self.__ostream        = ostream
-        self.__initiator      = initiator
-        self.__istream_lock   = threading.Lock()
-        self.__ostream_lock   = threading.Lock()
-        self.__unmarshal_lock = threading.Lock()
-        self.__connid         = get_connection_id()
+        self.__open = True
+        self.__istream = MessageStream(istream)
+        self.__ostream = MessageStream(ostream)
+        self.__initiator = initiator
+        self.__marshal_lock = threading.Lock()
+        self.__delete_lock = threading.RLock()
+        self.__connid = get_connection_id()
+        self.__last_delete = time.time()
+        self.gc_enabled = True
+        self.gc_interval = 5.0 # Every 5 seconds
 
         # Define message handlers (MessageType -> method)
         self.message_handlers = {
-            MessageType.response:  self.__handle_response,
-            MessageType.exception: self.__handle_exception,
-            MessageType.delete:    self.__handle_delete
+            MessageType.response: self.__handle_response,
+            MessageType.exception: self.__handle_exception
         }
 
         # Attributes required to track responses.
-        self.__thread_local      = threading.local()
+        self.__thread_local = threading.local()
         self.__response_handlers = {}
 
         # Attributes required to track number of threads processing requests.
@@ -123,9 +159,9 @@ class BaseConnection(object):
         #       are all waiting on responses.
         self.__receiving  = False # Is someone calling self.__recv?
         self.__processing = 0  # How many requests are being processed.
-        self.__waiting    = 0  # How many responses are pending.
-        self.__responses  = 0
-        self.__requests   = []
+        self.__waiting = 0  # How many responses are pending.
+        self.__responses = 0
+        self.__requests = []
         self.__processing_condition = threading.Condition(threading.Lock())
 
         # Uncomment the following for debugging.
@@ -140,9 +176,11 @@ class BaseConnection(object):
                     open("%d-%d.out" % (os.getpid(), self.__connid),"wb"))
 
         # (Client) Contains mapping of id(obj) -> proxy
-        self.__proxies = {} #weakref.WeakValueDictionary()
-        # (Client) Contains mapping of id(proxy) -> id(obj)
+        self.__proxies = {}
+        # (Client) Contains mapping of id(proxy) -> (id(obj), version)
         self.__proxy_ids = {}
+        # (Client) Contains a mapping of id(obj) -> version
+        self.__pending_deletes = {}
         # (Server) Contains mapping of id(obj) -> (obj, proxy-info)
         self.__proxied_objects = {}
 
@@ -210,18 +248,10 @@ Proxied Object Count: %r
             finally:
                 self.__processing_condition.release()
 
-            self.__ostream_lock.acquire()
-            try:
-                self.__ostream.close()
-                pushy.util.logger.debug("Closed ostream")
-            finally:
-                self.__ostream_lock.release()
-            self.__istream_lock.acquire()
-            try:
-                self.__istream.close()
-                pushy.util.logger.debug("Closed istream")
-            finally:
-                self.__istream_lock.release()
+            self.__ostream.close()
+            pushy.util.logger.debug("Closed ostream")
+            self.__istream.close()
+            pushy.util.logger.debug("Closed istream")
         except:
             import traceback
             traceback.print_exc()
@@ -244,6 +274,19 @@ Proxied Object Count: %r
 
     def send_request(self, message_type, args):
         "Send a request message and wait for a response."
+
+        # Convert the message type to a "as_tuple", if the user called
+        # self.as_tuple.
+        try:
+            if self.__thread_local.as_tuple_count:
+                if self.__thread_local.as_tuple_count == 1:
+                    del self.__thread_local.as_tuple_count
+                else:
+                    self.__thread_local.as_tuple_count -= 1
+                args = (int(message_type), args)
+                message_type = MessageType.as_tuple
+        except AttributeError:
+            pass
 
         # If a request is being processed, then increase the 'waiting' count,
         # so other threads may attempt to receive messages.
@@ -414,18 +457,26 @@ Proxied Object Count: %r
 
         # If it's a tuple, try to marshal each item individually.
         if type(obj) is tuple:
-            return (MARSHAL_TUPLE, map(self.__marshal, obj))
+            return (MARSHAL_TUPLE, tuple(map(self.__marshal, obj)))
 
         i = id(obj)
         if i in self.__proxied_objects:
             # The object has previously been proxied.
-            return self.__proxied_objects[i][1]
-        elif i in self.__proxy_ids:
+            self.__marshal_lock.acquire()
+            try:
+                if i in self.__proxied_objects:
+                    obj, result, version = self.__proxied_objects[i]
+                    self.__proxied_objects[i] = (obj, result, version+1)
+                    return (MARSHAL_PROXY, result, version+1)
+            finally:
+                self.__marshal_lock.release()
+
+        if i in self.__proxy_ids:
             # Object originates at the peer.
-            return (MARSHAL_ORIGIN, self.__proxy_ids[i])
+            return (MARSHAL_ORIGIN, self.__proxy_ids[i][0])
         else:
             # Create new entry in proxy objects map:
-            #    id -> (obj, refcount, opmask, args)
+            #    id -> (obj, opmask, proxy_type[, args])
             #
             # opmask is a bitmask defining whether or not the object
             # defines various methods (__add__, __iter__, etc.)
@@ -435,10 +486,14 @@ Proxied Object Count: %r
             pushy.util.logger.debug(
                 "Marshalling object: %r, %r", i, proxy_type)
 
-            marshalled_args = self.__marshal(args)
-            result = (MARSHAL_PROXY, i, opmask, int(proxy_type), marshalled_args)
-            self.__proxied_objects[i] = (obj, result)
-            return result
+            version = 0
+            if args is not None:
+                marshalled_args = self.__marshal(args)
+                result = (i, opmask, int(proxy_type), marshalled_args)
+            else:
+                result = (i, opmask, int(proxy_type))
+            self.__proxied_objects[i] = (obj, result, version)
+            return (MARSHAL_PROXY, result, version)
 
 
     def __unmarshal(self, obj):
@@ -448,19 +503,28 @@ Proxied Object Count: %r
             elif obj[0] is MARSHAL_ORIGIN:
                 return self.__proxied_objects[obj[1]][0]
             elif obj[0] is MARSHAL_PROXY:
-                oid = obj[1]
-                if oid in self.__proxies:
-                    return self.__proxies[oid]
+                description, version = obj[1], obj[2]
+                oid = description[0]
+                ref = self.__proxies.get(oid, None)
+                if ref is not None:
+                    obj = ref()
+                    if obj is not None:
+                        # Update the local version
+                        self.__proxy_ids[id(obj)] = (oid, version)
+                        return obj
 
-                opmask = obj[2]
-                proxy_type = proxy_types[obj[3]]
-                args = self.__unmarshal(obj[4])
+                opmask = description[1]
+                proxy_type = proxy_types[description[2]]
+                args = None
+                if len(description) > 3:
+                    args = self.__unmarshal(description[3])
                 pushy.util.logger.debug(
-                    "Unmarshalling object: %r, %r", oid, proxy_type)
+                    "Unmarshalling object: %r, %r, %r",
+                    oid, proxy_type, bin(opmask))
 
                 # New object: (id, opmask, object_type, args)
                 register_proxy = \
-                    lambda proxy: self.__register_proxy(proxy, oid)
+                    lambda proxy: self.__register_proxy(proxy, oid, version)
                 return Proxy(opmask, proxy_type, args, self, register_proxy)
             else:
                 raise ValueError, "Invalid type: %r" % obj[0]
@@ -469,38 +533,79 @@ Proxied Object Count: %r
             return obj
 
 
-    def __register_proxy(self, proxy, remote_id):
+    def __register_proxy(self, proxy, remote_id, version):
+        id_proxy = id(proxy)
         pushy.util.logger.debug(
-            "Registering a proxy: %r -> %r", id(proxy), remote_id)
-        self.__proxies[remote_id] = proxy
-        self.__proxy_ids[id(proxy)] = remote_id
+            "Registering a proxy: %r -> id=%r, version=%r",
+            id_proxy, remote_id, version)
+        if self.gc_enabled:
+            ref = weakref.ref(proxy, lambda ref: self.delete(id_proxy))
+        else:
+            ref = lambda: proxy
+        self.__proxies[remote_id] = ref
+        self.__proxy_ids[id_proxy] = (remote_id, version)
 
 
     def __send_message(self, message_type, args):
+        # See if there are any objects to delete. If there are, send a delete
+        # message first.
+        self.__send_pending_deletes()
+
+        # Send the original message.
         thread_id = self.__peer_thread
         marshalled = self.__marshal(args)
         payload = marshal.dumps(marshalled, 0)
         m = Message(message_type, payload, thread_id)
-        bytes = m.pack()
         pushy.util.logger.debug("Sending %r -> %r", m, thread_id)
-        self.__ostream_lock.acquire()
-        try:
-            self.__ostream.write(bytes)
-            self.__ostream.flush()
-        finally:
-            self.__ostream_lock.release()
+        self.__ostream.send_message(m)
+
+
+    def __send_pending_deletes(self):
+        """
+        Checks if there are any pending deletions, and, if the garbage
+        collecton timer has expired, sends a deletion message and resets the
+        timer.
+
+        Note that this method does not check whether GC is enabled, since there
+        may be deletions enqueued since before GC was disabled. The initial
+        check of "not self.__pending_deletes" should be sufficient to keep the
+        overhead down.
+        """
+
+        if not self.__pending_deletes:
+            return
+
+        time_now = time.time()
+        if time_now - self.__last_delete > self.gc_interval:
+            pending = self.__pending_deletes
+            self.__pending_deletes = {}
+            self.__delete_lock.acquire()
+            try:
+                if pending:
+                    self.__last_delete = time.time()
+                    try:
+                        pending_items = tuple(pending.items())
+                        pushy.util.logger.debug("Deleting %r", pending_items)
+                        payload = marshal.dumps(pending_items, 0)
+                        m = Message(MessageType.delete, payload, 0, 0)
+                        pushy.util.logger.debug("Sending %r", m)
+                        self.__ostream.send_message(m)
+                    finally:
+                        pending.clear()
+            finally:
+                self.__delete_lock.release()
 
 
     def __recv(self):
         pushy.util.logger.debug("Waiting for message")
-        self.__istream_lock.acquire()
-        try:
-            m = Message.unpack(self.__istream)
+        m = self.__istream.receive_message()
+        while m.type == MessageType.delete:
             pushy.util.logger.debug("Received %r", m)
-            return m
-        finally:
-            pushy.util.logger.debug("Receive ended")
-            self.__istream_lock.release()
+            deleted_ids = marshal.loads(m.payload)
+            self.__handle_delete(deleted_ids)
+            m = self.__istream.receive_message()
+        pushy.util.logger.debug("Received %r", m)
+        return m
 
 
     def __handle(self, m):
@@ -553,6 +658,24 @@ Proxied Object Count: %r
                     self.__peer_thread = 0
 
 
+    def __handle_delete(self, deleted):
+        pushy.util.logger.debug("Handling delete: %r", deleted)
+        try:
+            self.__marshal_lock.acquire()
+            try:
+                for (id_, remote_version) in deleted:
+                    if id_ in self.__proxied_objects:
+                        obj, result, version = self.__proxied_objects[id_]
+                        if remote_version == version:
+                            del self.__proxied_objects[id_]
+            finally:
+                self.__marshal_lock.release()
+        except:
+            import traceback
+            pushy.util.logger.debug(traceback.format_exc())
+            raise
+
+
     def __handle_response(self, message_type, result):
         return result
 
@@ -561,25 +684,39 @@ Proxied Object Count: %r
         raise e
 
 
-    def __handle_delete(self, message_type, id_):
-        del self.__proxied_objects[id_]
-
-
-    def delete(self, obj):
+    def delete(self, id_proxy):
         """
-        Delete the proxy, and request the peer to delete the original proxied
-        object.
+        This is the weakref callback for proxied objects. This will enqueue the
+        original object's ID and most recently received version for deletion at
+        the originator.
+
+        The __send_message method is reponsible for picking up these pending
+        deletions, and sending them prior to any new messages.
         """
 
-        id_proxy = id(obj)
+        # If the connection is not closed, send a message to the peer to
+        # delete its copy.
+        id_orig, version = self.__proxy_ids[id_proxy]
+        del self.__proxies[id_orig]
+        del self.__proxy_ids[id_proxy]
+        self.__delete_lock.acquire()
         try:
-            # If the connection is not closed, send a message to the peer to
-            # delete its copy.
-            id_orig = self.__proxy_ids[id_proxy]
-            self.send_request(MessageType.delete, id_orig)
+            self.__pending_deletes[id_orig] = version
         finally:
-            # Remove the object's ID from self.__proxy_ids. We don't need to
-            # remove it from self.__proxies, since it's a weak value
-            # dictionary.
-            del self.__proxy_ids[id_proxy]
+            self.__delete_lock.release()
+
+
+    def as_tuple(self, fn):
+        """
+        Calls the given function, ensuring that the next request sent to the
+        peer will be returned as a tuple.
+        """
+
+        try:
+            self.__thread_local.as_tuple_count += 1
+        except AttributeError:
+            self.__thread_local.as_tuple_count = 1
+        res = fn()
+        assert type(res) is tuple
+        return res
 

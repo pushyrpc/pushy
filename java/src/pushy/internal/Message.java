@@ -285,6 +285,8 @@ public class Message
         public static final Type setattr        = createType("setattr");
         public static final Type getstr         = createType("getstr");
         public static final Type getrepr        = createType("getrepr");
+        public static final Type delete_        = createType("delete");
+        public static final Type as_tuple       = createType("as_tuple");
         public static final Type op__call__     = createType("op__call__");
         public static final Type op__lt__       = createType("op__lt__");
         public static final Type op__le__       = createType("op__le__");

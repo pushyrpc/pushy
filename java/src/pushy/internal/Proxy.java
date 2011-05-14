@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -37,7 +37,7 @@ public class Proxy
     /**
      * Create an object which provides local access to a remote object.
      */
-    public static Object
+    public static ProxyObject
     getProxy(Number id, Number operators, Integer type, Object argument,
              Connection connection)
     {
@@ -47,10 +47,10 @@ public class Proxy
         //      interfaces to implement.
 
         if (Type.list.equals(type))
-            return new pushy.util.List(proxy);
+            return new ProxyList(proxy);
 
         if (Type.dictionary.equals(type))
-            return new pushy.util.Map(proxy);
+            return new ProxyMap(proxy);
 
         return proxy;
     }
@@ -87,9 +87,8 @@ public class Proxy
             Message.Type type = (Message.Type)iter.next();
             if (type.getName().startsWith("op__"))
             {
-                mask = mask.shiftLeft(1);
                 if (hasOperator(object, type))
-                    mask = mask.setBit(0);
+                    mask = mask.setBit(type.getCode());
             }
         }
         return mask;
@@ -143,6 +142,7 @@ public class Proxy
      */
     public static Object getArgument(Object object, Type type)
     {
+/*
         if (type.equals(Type.dictionary))
         {
             Map map = (Map)object;
@@ -159,6 +159,7 @@ public class Proxy
         {
             return ((Collection)object).toArray(new Object[]{});
         }
+*/
         return null;
     }
 
@@ -225,12 +226,13 @@ public class Proxy
 
         // Define proxy types: must be in the same order as in the Python
         // code.
-        public static final Type object     = createType("object");
-        public static final Type exception  = createType("exception");
-        public static final Type dictionary = createType("dictionary");
-        public static final Type list       = createType("list");
-        public static final Type set        = createType("set");
-        public static final Type module     = createType("module");
+        public static final Type oldstyleclass = createType("oldstyleclass");
+        public static final Type object        = createType("object");
+        public static final Type exception     = createType("exception");
+        public static final Type dictionary    = createType("dictionary");
+        public static final Type list          = createType("list");
+        public static final Type set           = createType("set");
+        public static final Type module        = createType("module");
     }
 }
 
