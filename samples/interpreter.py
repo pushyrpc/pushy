@@ -1,4 +1,4 @@
-# Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -23,15 +23,21 @@
 
 import code, common, os, sys
 
+try:
+    import readline
+except ImportError:
+    pass
+
 class RemoteConsole(code.InteractiveConsole):
     def __init__(self, connection):
         code.InteractiveConsole.__init__(self)
         self.connection = connection
         self.compile = connection.modules.codeop.CommandCompiler()
+        self.locals = connection.eval("{}")
 
     def runcode(self, co):
         try:
-            self.connection.eval(co)
+            self.connection.eval(co, locals=self.locals)
         except SystemExit:
             raise
         except:
