@@ -301,5 +301,42 @@ public class Client
         }
         return system;
     }
+
+    /**
+     * Determine whether or not garbage collection of proxies is enabled.
+     *
+     * If garbage collection is enabled, weak references will be created for
+     * proxies. This is the default.
+     */
+    public boolean isGCEnabled()
+    {
+        return connection.isGCEnabled();
+    }
+
+    /**
+     * Enable or disable garbage collection of proxies.
+     */
+    public void setGCEnabled(boolean enabled)
+    {
+        connection.setGCEnabled(enabled);
+    }
+
+    /**
+     * Get the garbage collection interval, in milliseconds.
+     *
+     * This is the amount of time in between sending of "delete" messages.
+     */
+    public int getGCIntervalMillis()
+    {
+        return connection.getGCIntervalMillis();
+    }
+
+    /**
+     * Set the garbage collection interval, in milliseconds.
+     */
+    public void setGCIntervalMillis(int intervalMillis)
+    {
+        connection.setGCIntervalMillis(intervalMillis);
+    }
 }
 
