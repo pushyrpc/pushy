@@ -33,6 +33,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -67,15 +68,55 @@ public abstract class BaseConnection
     private List requests = new ArrayList();
     private Map proxiedObjects = new HashMap();
     private Map proxies = new HashMap();
-    //private Map proxyIds = new IdentityHashMap();
+    private Map pendingDeletes = new HashMap();
     private ThreadLocal threadRequestCount = new ThreadLocal();
     private ThreadLocal peerThread = new ThreadLocal();
+    private boolean gcEnabled = true;
+    private int gcIntervalMillis = 5000; // 5 seconds
+    private long gcLastDeleteMillis = System.currentTimeMillis();
 
     protected BaseConnection(java.io.InputStream istream,
                              java.io.OutputStream ostream)
     {
         this.istream = istream;
         this.ostream = ostream;
+    }
+
+    /**
+     * Determine whether or not garbage collection of proxies is enabled.
+     *
+     * If garbage collection is enabled, weak references will be created for
+     * proxies. This is the default.
+     */
+    public boolean isGCEnabled()
+    {
+        return gcEnabled;
+    }
+
+    /**
+     * Enable or disable garbage collection of proxies.
+     */
+    public void setGCEnabled(boolean enabled)
+    {
+        gcEnabled = enabled;
+    }
+
+    /**
+     * Get the garbage collection interval, in milliseconds.
+     *
+     * This is the amount of time in between sending of "delete" messages.
+     */
+    public int getGCIntervalMillis()
+    {
+        return gcIntervalMillis;
+    }
+
+    /**
+     * Set the garbage collection interval, in milliseconds.
+     */
+    public void setGCIntervalMillis(int millis)
+    {
+        gcIntervalMillis = millis;
     }
 
     /**
@@ -143,6 +184,24 @@ public abstract class BaseConnection
                 setThreadRequestCount(threadRequestCount - 1);
                 if (threadRequestCount == 1)
                     setPeerThread(0);
+            }
+        }
+    }
+
+    /**
+     * Handles a delete message.
+     */
+    private void handleDelete(Object[] ids)
+    {
+        synchronized (proxiedObjects)
+        {
+            for (int i = 0; i < ids.length; ++i)
+            {
+                int[] id_and_version = (int[])ids[i];
+                Integer id = new Integer(id_and_version[0]);
+                ExportedObject eo = (ExportedObject)proxiedObjects.get(id);
+                if (eo.getVersion() == id_and_version[1])
+                    proxiedObjects.remove(id);
             }
         }
     }
@@ -269,10 +328,58 @@ public abstract class BaseConnection
         Message msg = new Message(type, marshal(value), getPeerThread());
         synchronized (ostream)
         {
+            // See if there are any proxy objects that have been garbage
+            // collected. If there are, send a delete message first.
+            sendPendingDeletes();
+
+            // Send the original message.
             logger.log(
                 Level.FINEST, "Sending message: {0}", new Object[]{msg});
             msg.pack(ostream);
             ostream.flush();
+        }
+    }
+
+    /**
+     * Sends a message to the peer to release exported objects that are no
+     * longer referenced by this JVM.
+     */
+    private void sendPendingDeletes() throws IOException
+    {
+        synchronized (pendingDeletes)
+        {
+            if (pendingDeletes.isEmpty())
+                return;
+
+            // Check if the garbage collection timer has expired.
+            long timeNowMillis = System.currentTimeMillis();
+            if ((timeNowMillis - gcLastDeleteMillis) < gcIntervalMillis)
+                return;
+            gcLastDeleteMillis = timeNowMillis;
+
+            try
+            {
+                // Convert the map into an array of pairs.
+                Object[] pendingItems = new Object[pendingDeletes.size()];
+                Iterator iter = pendingDeletes.entrySet().iterator();
+                for (int i = 0; iter.hasNext(); ++i)
+                {
+                    Map.Entry entry = (Map.Entry)iter.next();
+                    pendingItems[i] =
+                        new Object[]{entry.getKey(), entry.getValue()};
+                }
+
+                // Send a "delete" message.
+                logger.log(Level.FINEST, "Sending deleting message");
+                byte[] payload = Marshal.dump(pendingItems);
+                Message msg = new Message(Message.Type.delete_, payload, 0, 0);
+                msg.pack(ostream);
+                ostream.flush();
+            }
+            finally
+            {
+                pendingDeletes.clear();
+            }
         }
     }
 
@@ -488,13 +595,19 @@ public abstract class BaseConnection
      */
     private Message getMessage() throws IOException
     {
+        Message message;
         synchronized (istream)
         {
-            Message message = Message.unpack(istream);
-            logger.log(
-                Level.FINEST, "Received message: {0}", new Object[]{message});
-            return message;
+            message = Message.unpack(istream);
+            while (message.getType() == Message.Type.delete_)
+            {
+                logger.log(Level.FINEST, "Received message: {0}",
+                    new Object[]{message});
+                handleDelete((Object[])Marshal.load(message.getPayload()));
+                message = Message.unpack(istream);
+            }
         }
+        return message;
     }
 
     private byte[] marshal(Object value) throws IOException
@@ -531,22 +644,6 @@ public abstract class BaseConnection
             if (proxy.getConnection() == this)
                 return new Object[]{MARSHAL_ORIGIN, proxy.getId()};
         }
-
-        // If the object exists in the proxies map, then return the
-        // identifier to the originator of the object.
-/*
-        XXX this isn't neccesary is it? due to the above short-circuit?
-        synchronized (proxies)
-        {
-            Number id = (Number)proxyIds.get(value);
-            if (id != null)
-            {
-                stream.write('o');
-                Marshal.dump(id, stream);
-                return;
-            }
-        }
-*/
 
         // If it's a previously proxied object and belongs to this connection,
         // then shortcut the export step.
@@ -627,11 +724,17 @@ public abstract class BaseConnection
             Number id = (Number)Array.get(description, 0);
             synchronized (proxies)
             {
-                ProxyObject proxy = (ProxyObject)proxies.get(id);
-                if (proxy != null)
+                Object proxy_ = proxies.get(id);
+                if (proxy_ != null)
                 {
-                    proxy.setVersion(version.intValue());
-                    return proxy;
+                    if (proxy_ instanceof WeakReference)
+                        proxy_ = (ProxyObject)((WeakReference)proxy_).get();
+                    ProxyObject proxy = (ProxyObject)proxy_;
+                    if (proxy != null)
+                    {
+                        proxy.setVersion(version.intValue());
+                        return proxy;
+                    }
                 }
             }
 
@@ -649,7 +752,10 @@ public abstract class BaseConnection
             // Add the proxy.
             synchronized (proxies)
             {
-                proxies.put(id, proxy);
+                if (isGCEnabled())
+                    proxies.put(id, new WeakReference(proxy));
+                else
+                    proxies.put(id, proxy);
             }
             return proxy;
         }
@@ -657,6 +763,23 @@ public abstract class BaseConnection
         {
             logger.severe("Unhandled type: " + type);
             return null;
+        }
+    }
+
+    /**
+     * This method should be called on proxy objects when they are garbage
+     * collected.
+     */
+    void deleted(ProxyObject proxy)
+    {
+        synchronized (proxies)
+        {
+            synchronized (pendingDeletes)
+            {
+                proxies.remove(proxy.getId());
+                pendingDeletes.put(
+                    proxy.getId(), new Integer(proxy.getVersion()));
+            }
         }
     }
 

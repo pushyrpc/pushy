@@ -40,6 +40,12 @@ public class PushyObjectImpl implements PushyObject, ProxyObject
         this.version = 0;
     }
 
+    protected void finalize() throws Throwable
+    {
+        connection.deleted(this);
+        super.finalize();
+    }
+
     public Object getId()
     {
         return this.id;

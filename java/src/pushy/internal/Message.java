@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 Andrew Wilkins <axwalk@gmail.com>
+ * Copyright (c) 2009, 2011 Andrew Wilkins <axwalk@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -48,7 +48,7 @@ public class Message
         this(type, payload, target, ThreadId.getThreadId());
     }
 
-    private Message(Type type, byte[] payload, long target, long source)
+    public Message(Type type, byte[] payload, long target, long source)
     {
         this.type    = type;
         this.payload = payload;
