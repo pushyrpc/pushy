@@ -520,7 +520,7 @@ Proxied Object Count: %r
                     args = self.__unmarshal(description[3])
                 pushy.util.logger.debug(
                     "Unmarshalling object: %r, %r, %r",
-                    oid, proxy_type, bin(opmask))
+                    oid, proxy_type, opmask)
 
                 # New object: (id, opmask, object_type, args)
                 register_proxy = \
