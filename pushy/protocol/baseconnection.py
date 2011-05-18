@@ -694,16 +694,25 @@ Proxied Object Count: %r
         deletions, and sending them prior to any new messages.
         """
 
-        # If the connection is not closed, send a message to the peer to
-        # delete its copy.
-        id_orig, version = self.__proxy_ids[id_proxy]
-        del self.__proxies[id_orig]
-        del self.__proxy_ids[id_proxy]
-        self.__delete_lock.acquire()
         try:
-            self.__pending_deletes[id_orig] = version
-        finally:
-            self.__delete_lock.release()
+            # If the connection is not closed, send a message to the peer to
+            # delete its copy.
+            id_orig, version = self.__proxy_ids[id_proxy]
+            del self.__proxies[id_orig]
+            del self.__proxy_ids[id_proxy]
+            self.__delete_lock.acquire()
+            try:
+                self.__pending_deletes[id_orig] = version
+            finally:
+                self.__delete_lock.release()
+        except:
+            # [lp:784619] Pushy was causing an access violation at interpreter
+            # exit on Windows 7 + Python 2.7.1. This was caused by an exception
+            # raised during weak references being collected. Furthermore, since
+            # it occurs during interpreter finalisation, various facilities
+            # (e.g. logging) are unavailable. The only logical thing to do is
+            # to swallow the exception and immediately return.
+            return
 
 
     def as_tuple(self, fn):
