@@ -35,12 +35,6 @@ import struct
 import sys
 import threading
 
-# Favour cPickle over pickle.
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
 # Import zipimport, for use in PushyPackageLoader.
 try:
     import zipimport
@@ -205,7 +199,7 @@ def pushy_server(stdin, stdout):
     import sys
 
     # Reconstitute the package hierarchy delivered from the client
-    (packages, modules) = pickle.load(stdin)
+    (packages, modules) = marshal.load(stdin)
 
     # Add the package to the in-memory package importer
     importer = InMemoryImporter(packages, modules)
@@ -364,7 +358,7 @@ class PushyClient(object):
                 self.server.stdin.flush()
                 # Send the packages over to the server
                 packages = self.__load_packages()
-                pickle.dump(packages, self.server.stdin)
+                marshal.dump(packages, self.server.stdin, 1)
                 self.server.stdin.flush()
 
             # Finally... start the connection. Magic! 
