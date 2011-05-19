@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009 Andrew Wilkins <axwalk@gmail.com>
+# Copyright (c) 2008, 2011 Andrew Wilkins <axwalk@gmail.com>
 # 
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -115,7 +115,7 @@ class PushyPackageLoader:
                 for f in [f for f in files if f.endswith(".py")]:
                     source = read_fn(root + "/" + f)
                     source = source.replace("\r", "")
-                    modules[f[:-3]] = marshal.dumps(source)
+                    modules[f[:-3]] = marshal.dumps(source, 0)
      
                 parent = self.__packages
                 parts = modulename.split(".")
@@ -128,24 +128,13 @@ class PushyPackageLoader:
                         source = read_fn(root[:prefix_len] + part + \
                                          "/__init__.py")
                         source = source.replace("\r", "")
-                        #parent[part][2]["__init__"] = marshal.dumps(source)
+                        #parent[part][2]["__init__"] = marshal.dumps(source, 0)
                     parent = parent[part][1]
                 parent[parts[-1]] = [root, {}, modules]
 
     def __loadModule(self, module):
-        fname = module.__file__
-        if fname.endswith(".py") and os.path.exists(fname + "c"):
-            fname = fname + "c"
-        if fname.endswith(".pyc"):
-            f = open(fname, "rb")
-            f.seek(struct.calcsize("<4bL"))
-            modulename = os.path.basename(fname)[:-4]
-            self.__modules[modulename] = f.read()
-        else:
-            #code = compile(open(fname).read(), fname, "exec")
-            code = open(fname).read()
-            modulename = os.path.basename(fname)[:-3]
-            self.__modules[modulename] = marshal.dumps(code)
+        source = inspect.getsource(module)
+        self.__modules[module.__name__] = marshal.dumps(source, 0)
 
 class InMemoryImporter:
     """
@@ -274,28 +263,12 @@ class AutoImporter(object):
 # Read the source for the server into a string. If we're the server, we'll
 # have defined __builtin__.pushy_source (by the "realServerLoaderSource").
 if not hasattr(__builtin__, "pushy_source"):
-    # If Jython is used, don't try to byte-compile the source. Just send the
-    # source code on through.
-    jython = sys.platform.startswith("java")
-    should_compile = (not jython)
-
     if "__loader__" in locals():
-        if should_compile:
-            serverSource = __loader__.get_code(__name__)
-            serverSource = marshal.dumps(serverSource)
-        else:
-            serverSource = __loader__.get_source(__name__)
-            serverSource = marshal.dumps(serverSource)
+        serverSource = __loader__.get_source(__name__)
+        serverSource = marshal.dumps(serverSource, 0)
     else:
-        if __file__.endswith(".pyc"):
-            f = open(__file__, "rb")
-            f.seek(struct.calcsize("<4bL"))
-            serverSource = f.read()
-        else:
-            serverSource = open(__file__).read()
-            if should_compile:
-                serverSource = compile(serverSource, __file__, "exec")
-            serverSource = marshal.dumps(serverSource)
+        serverSource = open(inspect.getsourcefile(AutoImporter)).read()
+        serverSource = marshal.dumps(serverSource, 0)
 else:
     serverSource = __builtin__.pushy_source
 md5ServerSource = hashlib.md5(serverSource).digest()

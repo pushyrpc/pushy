@@ -33,5 +33,5 @@ if __name__ == "__main__":
         print "The remote host's platform is:", \
               connection.modules.platform.platform()
     finally:
-        del connection
+        connection.close()
 
