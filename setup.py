@@ -69,7 +69,7 @@ setup(
     requires = dependencies,
     author="Andrew Wilkins",
     author_email="axwalk@gmail.com",
-    url="http://launchpad.net/pushy/",
+    url="http://awilkins.id.au/pushy/",
     packages=["pushy", "pushy.protocol", "pushy.transport",
               "pushy.transport.smb", "pushy.util"]
 )
