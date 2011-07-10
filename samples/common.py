@@ -33,6 +33,8 @@ def parse_args():
     parser.add_option("-u", "--username", dest="username")
     parser.add_option("-p", "--password", dest="password")
     parser.add_option("--python", dest="python", default="python")
+    parser.add_option("--ask-password", dest="ask_password",
+                      action="store_true", default=False)
     (options, args) = parser.parse_args()
     if len(args) == 0:
         parser.error("missing target argument")
@@ -43,6 +45,14 @@ def get_connection():
     username = options.username
     password = options.password
     python   = options.python
+    if options.ask_password:
+        if options.password is not None:
+            import warnings
+            warnings.warn(
+                "--ask-password and --password were both specified: " +\
+                "ignoring specified password")
+        import getpass
+        password = getpass.getpass()
     return pushy.connect(args[0], username=username, password=password,
                          python=python)
 

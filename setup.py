@@ -62,7 +62,7 @@ dependencies = [
 
 setup(
     name="pushy",
-    version="0.5",
+    version="0.5.1",
     description = description,
     long_description = long_description,
     classifiers = classifiers,

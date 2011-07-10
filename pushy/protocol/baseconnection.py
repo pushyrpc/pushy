@@ -554,7 +554,7 @@ Proxied Object Count: %r
         # Send the original message.
         thread_id = self.__peer_thread
         marshalled = self.__marshal(args)
-        payload = marshal.dumps(marshalled, 0)
+        payload = marshal.dumps(marshalled, 1)
         m = Message(message_type, payload, thread_id)
         pushy.util.logger.debug("Sending %r -> %r", m, thread_id)
         self.__ostream.send_message(m)
@@ -586,7 +586,7 @@ Proxied Object Count: %r
                     try:
                         pending_items = tuple(pending.items())
                         pushy.util.logger.debug("Deleting %r", pending_items)
-                        payload = marshal.dumps(pending_items, 0)
+                        payload = marshal.dumps(pending_items, 1)
                         m = Message(MessageType.delete, payload, 0, 0)
                         pushy.util.logger.debug("Sending %r", m)
                         self.__ostream.send_message(m)

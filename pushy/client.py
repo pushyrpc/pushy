@@ -109,7 +109,7 @@ class PushyPackageLoader:
                 for f in [f for f in files if f.endswith(".py")]:
                     source = read_fn(root + "/" + f)
                     source = source.replace("\r", "")
-                    modules[f[:-3]] = marshal.dumps(source, 0)
+                    modules[f[:-3]] = marshal.dumps(source, 1)
      
                 parent = self.__packages
                 parts = modulename.split(".")
@@ -128,7 +128,7 @@ class PushyPackageLoader:
 
     def __loadModule(self, module):
         source = inspect.getsource(module)
-        self.__modules[module.__name__] = marshal.dumps(source, 0)
+        self.__modules[module.__name__] = marshal.dumps(source, 1)
 
 class InMemoryImporter:
     """
@@ -259,10 +259,10 @@ class AutoImporter(object):
 if not hasattr(__builtin__, "pushy_source"):
     if "__loader__" in locals():
         serverSource = __loader__.get_source(__name__)
-        serverSource = marshal.dumps(serverSource, 0)
+        serverSource = marshal.dumps(serverSource, 1)
     else:
         serverSource = open(inspect.getsourcefile(AutoImporter)).read()
-        serverSource = marshal.dumps(serverSource, 0)
+        serverSource = marshal.dumps(serverSource, 1)
 else:
     serverSource = __builtin__.pushy_source
 md5ServerSource = hashlib.md5(serverSource).digest()
@@ -358,7 +358,7 @@ class PushyClient(object):
                 self.server.stdin.flush()
                 # Send the packages over to the server
                 packages = self.__load_packages()
-                marshal.dump(packages, self.server.stdin, 1)
+                self.server.stdin.write(marshal.dumps(packages, 1))
                 self.server.stdin.flush()
 
             # Finally... start the connection. Magic! 
