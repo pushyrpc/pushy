@@ -29,3 +29,16 @@ nailed-up server for listening for connections.
    connections: 10101.
 
 
+Starting a Server From the Command Line
+---------------------------------------
+
+As an alternative to to the :py:func:`pushy.server.run` function, it is
+possible to start a Pushy server from the command line, like so:
+
+.. code-block:: console
+
+    $ hostname
+    fork
+    $ python -m pushy.server
+
+

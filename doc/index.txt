@@ -38,8 +38,9 @@ that proxied objects may be passed to Python's various builtin functions.
 Pushy contains multiple transports for connecting interpreters, as well as a
 means for users to provide their own transport modules. Builtin transports are
 provided for connecting to :ref:`local <local-transport>` interpreters, and to
-remote interpreters via :ref:`SSH <ssh-transport>`, and named pipes
-(using :ref:`SMB <smb-transport>`) on Microsoft Windows.
+remote interpreters via :ref:`SSH <ssh-transport>`, named pipes
+(using :ref:`SMB <smb-transport>`) on Microsoft Windows, and over plain old
+TCP/IP sockets (using :ref:`daemon <daemon-transport>`).
 
 One of the most useful features of Pushy is that it will take care
 of starting the target Python interpreter for you, depending on which transport

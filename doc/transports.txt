@@ -87,6 +87,15 @@ the same Python executable (i.e. sys.executable).  The
 :py:mod:`pushy.transport.local` module defines a single class,
 :py:class:`Popen`, which provides the ``local`` transport.
 
+
+.. topic:: *local* Address Format
+
+    The address format for the ``local`` transport is simply ``local:`` ::
+
+        >>> import pushy
+        >>> con = pushy.connect("local:")
+
+
 .. py:class:: Popen(command, address)
 
    Defines the ``local`` transport, for creating and connecting to new Python
@@ -103,6 +112,23 @@ the same Python executable (i.e. sys.executable).  The
       :py:func:`shutil.copyfile` to perform the copy.
 
 
+**Example**
+
+In this example we create a new ``local`` connection. As we can see from the
+parent ID of the "remote" process, it is a subprocess of the main Python
+interpreter. ::
+
+    >>> import os, platform
+    >>> platform.node()
+    'fork'
+    >>> os.getpid()
+    2386
+    >>> import pushy
+    >>> con = pushy.connect("local:")
+    >>> con.modules.platform.node()
+    'fork'
+    >>> con.modules.os.getppid()
+    2386
 
 
 .. _ssh-transport:
@@ -119,6 +145,20 @@ fly, but Pushy doesn't need to be installed on the remote host, and nothing is
 transferred onto the remote filesystem. The ssh transport makes Pushy a safe
 alternative to traditional nailed-up, privileged services.
 
+
+.. topic:: *ssh* Address Format
+
+    The address format for the ``ssh`` transport is ``ssh::<hostname>``, where
+    ``<hostname>`` is substituted with the hostname (or IP address) of the
+    remote host to connect to. ::
+
+        >>> import pushy
+        >>> con = pushy.connect("ssh:my.remotehost.com")
+
+    It is possible to specify an alternative port, and specify the username and
+    password. See :py:class:`Popen` for more information on the parameters.
+
+
 .. py:class:: Popen(command, address, username=None, password=None, use_native=None, port=None, missing_host_key_policy="reject")
 
    Defines the ``ssh`` transport, for creating and connecting to new Python
@@ -126,7 +166,7 @@ alternative to traditional nailed-up, privileged services.
    connect via SSH using either `Paramiko <http://www.lag.net/paramiko/>`_, or,
    if available, a native SSH client, such as those provided by
    `OpenSSH <http://www.openssh.com>`_ and
-   `PuTTy <http://www.chiark.greenend.org.uk/~sgtatham/putty>`_.
+   `PuTTY <http://www.chiark.greenend.org.uk/~sgtatham/putty>`_.
 
    The username and password arguments may be omitted, in which case the
    current username will be used, and no password will be provided. In the
@@ -136,7 +176,7 @@ alternative to traditional nailed-up, privileged services.
    :type username: string or None
    :param password: The password with which to authenticate. If omitted, public-key authentication will be attempted.
    :type password: string or None
-   :param use_native: On Windows, Paramiko has been found to be faster than PuTTy, and so it is the default. On other platforms, the native ``ssh`` program is preferred. The preference may be overridden by passing a boolean value as the use_native argument.
+   :param use_native: On Windows, Paramiko has been found to be faster than PuTTY, and so it is the default. On other platforms, the native ``ssh`` program is preferred. The preference may be overridden by passing a boolean value as the use_native argument.
    :type use_native: bool or None
    :param port: The port of the SSH daemon to connect to, or None to use the default port.
    :type port: int or None
@@ -171,6 +211,20 @@ Windows system by installing a named pipe server, running as a Windows service. 
 service. Pushy does not yet have this feature, but it is planned for a future
 release.
 
+
+.. topic:: *smb* Address Format
+
+    The address format for the ``smb`` transport is ``smb::<hostname>``, where
+    ``<hostname>`` is substituted with the hostname (or IP address) of the
+    remote host to connect to. ::
+
+        >>> import pushy
+        >>> con = pushy.connect("smb:my.remotehost.com")
+
+    It is possible to specify the username and password, and the authenticaton
+    domain. See :py:class:`Popen` for more information on the parameters.
+
+
 .. py:class:: Popen(command, address, username=None, password=None, domain="")
 
    Defines the ``smb`` transport, for creating and connecting to new Python
@@ -184,7 +238,7 @@ release.
    :param address: The address of the target host, in UNC notation.
    :param username: The username with which to authenticate and run the remote Python process as. If omitted, the current user's username will instead be used.
    :type username: string or None
-   :param password: The password with which to authenticate. If omitted, public-key authentication will be attempted.
+   :param password: The password with which to authenticate.
    :type password: string or None
    :param domain: The Microsoft Windows domain with which to authenticate.
    :type domain: string
@@ -204,14 +258,43 @@ Sometimes you really do just want a long-lived server, and that's what the
 the ``daemon`` transport allows one to connect to a long-lived Python
 interpreter via a TCP/IP socket.
 
+
+.. topic:: *daemon* Address Format
+
+    The address format for the ``daemon`` transport is ``daemon::<hostname>``,
+    where ``<hostname>`` is substituted with the hostname (or IP address) of
+    the remote host to connect to. ::
+
+        >>> import pushy
+        >>> con = pushy.connect("daemon:my.remotehost.com")
+
+    It is possible to specify an alternative port. See :py:class:`Popen` for
+    more information on the parameters.
+
+
 .. py:class:: Popen(command, address[, port])
 
-
-   .. note:
+   .. note::
 
       The command argument is ignored by the ``daemon`` transport, as there is no need to create a new Python interpreter.
 
    :param address: The hostname or IP address to which the transport connect.
    :param port: The port to connect to, which is, by default: :py:const:`pushy.server.DEFAULT_PORT`.
    :type port: Integer
+
+
+**Example**
+
+First, start a Pushy daemon server:
+
+.. code-block:: console
+
+    $ hostname
+    fork
+    $ python -m pushy.server
+
+And now we can create a ``daemon`` transport connection::
+
+    >>> import pushy
+    >>> con = pushy.connect("daemon:fork")
 
