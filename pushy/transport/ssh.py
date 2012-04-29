@@ -36,7 +36,10 @@ is_windows = (sys.platform == "win32")
 try:
     import paramiko
 except ImportError:
-    paramiko = None
+    try:
+        import ssh as paramiko
+    except ImportError:
+        paramiko = None
 
 if paramiko:
     class WrappedChannelFile(object):
