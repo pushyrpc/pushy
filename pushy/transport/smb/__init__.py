@@ -26,12 +26,12 @@ __all__ = ["Popen"]
 import struct, sys, pushy.transport, StringIO
 
 # On Windows, prefer the native interface.
+BasePopen = None
 if sys.platform == "win32":
     try:
         import native
         BasePopen = native.NativePopen
-    except ImportError:
-        BasePopen = None
+    except ImportError: pass
 
 # If we're not on Windows, or the native interface is unavailable, use the
 # Impacket library instead.
