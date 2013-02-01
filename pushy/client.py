@@ -337,6 +337,9 @@ def get_transport(target):
 
 logid = 0
 
+class ClientInitException(Exception):
+    pass
+
 class PushyClient(object):
     "Client-side Pushy connection initiator."
 
@@ -392,18 +395,12 @@ class PushyClient(object):
             else:
                 self.fs = self.modules.os
         except:
-            import traceback
-            traceback.print_exc()
-            errorlines = self.server.stderr.readlines()
-            print >> sys.stderr, ""
-            for line in errorlines:
-                print >> sys.stderr, "[remote]", line.rstrip()
-            print >> sys.stderr, ""
-
+            lines = self.server.stderr.readlines()
+            msg = "\n" + "".join(["  [remote] " + line for line in lines])
             self.server = None
             self.remote = None
             self.serve_thread = None
-            raise
+            raise ClientInitException, msg, sys.exc_info()[2]
 
 
     # With-statement/context-manager support
