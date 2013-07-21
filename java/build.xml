@@ -59,7 +59,7 @@
                 <attribute name="Bundle-ManifestVersion" value="2"/>
                 <attribute name="Bundle-Name" value="Pushy"/>
                 <attribute name="Bundle-SymbolicName" value="pushy"/>
-                <attribute name="Bundle-Version" value="0.5.1.${revno}"/>
+                <attribute name="Bundle-Version" value="0.5.2.${revno}"/>
                 <attribute name="Export-Package"
                            value="pushy, pushy.io, pushy.net, pushy.modules"/>
             </manifest>

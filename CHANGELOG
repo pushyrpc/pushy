@@ -1,0 +1,9 @@
+0.5.2 (2013-07-21)
+
+- Catch ValueError (I/O operation on closed file) in
+  serve_forever, as well as IOError.
+- Pass -q to scp to suppress statistics in getfile/putfile.
+- Don't write connection errors to stderr, raise an exception.
+- Fix smb transport on unix (always define BasePopen)
+- Support the bitprophet/ssh fork of paramiko.
+
