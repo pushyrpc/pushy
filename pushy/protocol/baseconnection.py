@@ -268,7 +268,7 @@ Proxied Object Count: %r
                         self.__handle(m)
                 except IOError:
                     return
-                except ValueError as err:
+                except ValueError, err:
                     # File could already be closed
                     if err.message == 'I/O operation on closed file':
                         return
