@@ -61,6 +61,6 @@ objects and functions can be transparently accessed from the local interpreter.
 
 transports = {"ssh": None, "local": None, "daemon": None, "smb": None}
 
-from client import connect
-from server import serve_forever
+from pushy.client import connect
+from pushy.server import serve_forever
 
